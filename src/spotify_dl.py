@@ -358,12 +358,12 @@ def main():
             '-o',
             default=Path.home()/"Downloads",
             type=Path,
-            help="Path to directory where tracks should be downloaded to"
+            help="Path to directory where tracks should be downloaded to."
         )
         parser.add_argument(
             '--create-dir',
             action='store_true',
-            help="Create the output directory if it does not exist/"
+            help="Create the output directory if it does not exist."
         )
 
         args = parser.parse_args()
