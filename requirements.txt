@@ -1,1 +1,2 @@
-eyed3
+requests==2.25.0
+eyed3==0.9.7
