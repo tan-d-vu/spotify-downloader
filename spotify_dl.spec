@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['..\\spotify_dl.py'],
+    ['src\\spotify_dl.py'],
     pathex=[],
     binaries=[],
     datas=[],

@@ -41,6 +41,10 @@ DOWNLOADER_HEADERS = {
 
 PLAYLIST_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/playlist\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
+# In interactive mode, user is prompted upon first duplicate encountered
+skip_duplicate_downloads = False
+skip_duplicate_downloads_prompted = False
+
 
 @dataclass(frozen=True, eq=True)
 class SpotifySong:
@@ -264,11 +268,43 @@ def process_input_url(url: str, interactive: bool) -> list:
     return track_id_title_tuples
 
 
-def download_track(track_id, track_title, dest_dir: Path):
+def download_track(track_id, track_title, dest_dir: Path, interactive: bool, skip_duplicates: bool):
     # Grab a fresh download link since the one was got may have expired
     resp_json = get_track_data(track_id)
 
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{track_title}.mp3")
+    
+    if (dest_dir/track_filename).exists():
+        if skip_duplicates:
+            print(f"Skipping download for '{track_title}'...")
+            return
+
+        if interactive:
+            dup_song_inp = input(
+                f"The song '{track_title}' was already downloaded to {dest_dir.absolute()}.\n"
+                "  Would you like to download it again? [y/N]: "
+            )
+
+            if not dup_song_inp or dup_song_inp.lower().startswith('n'):
+                print("\nSkipping download.\n")
+
+                global skip_duplicate_downloads_prompted
+
+                if not skip_duplicate_downloads_prompted:
+                    dup_all_inp = input(
+                        "Would you like to ignore all songs that have already been downloaded? [Y/n]: "
+                    )
+
+                    if not dup_all_inp or dup_all_inp.lower().startswith('y'):
+                        global skip_duplicate_downloads
+                        skip_duplicate_downloads = True
+                        print("\nIgnoring all duplicate downloads.\n")
+
+                    skip_duplicate_downloads_prompted = True
+
+                return
+
+    print(f"Downloading: '{track_title}'...")
 
     # Clean browser heads for API
     hdrs = {
@@ -312,6 +348,7 @@ def download_track(track_id, track_title, dest_dir: Path):
 
         mp3_file.tag.save()
 
+    print("\tDone.")
 
 def main():
     print('', '=' * 48, '||          Spotify Song Downloader           ||', '=' * 48, sep='\n', end='\n\n')
@@ -363,7 +400,13 @@ def main():
         parser.add_argument(
             '--create-dir',
             action='store_true',
-            help="Create the output directory if it does not exist/"
+            help="Create the output directory if it does not exist."
+        )
+        parser.add_argument(
+            '--skip-duplicate-downloads',
+            action='store_true',
+            help="Don't download a song if the file already exists in the output directory.",
+            default=False
         )
 
         args = parser.parse_args()
@@ -385,6 +428,9 @@ def main():
                 continue
 
             tracks_to_dl.extend(track_id_title_tuple_list)
+
+        global skip_duplicate_downloads
+        skip_duplicate_downloads = args.skip_duplicate_downloads
 
     print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
@@ -408,11 +454,7 @@ def main():
     print('-' * 32)
 
     for track_id, track_title in list(dict.fromkeys(tracks_to_dl)):
-        print(f"Downloading: '{track_title}'...")
-
-        download_track(track_id, track_title, output_dir)
-
-        print("\tDone.")
+        download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
 
     print("\nAll done.")
 
