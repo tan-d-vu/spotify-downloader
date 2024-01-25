@@ -395,7 +395,7 @@ def main():
             '-o',
             default=Path.home()/"Downloads",
             type=Path,
-            help="Path to directory where tracks should be downloaded to"
+            help="Path to directory where tracks should be downloaded to."
         )
         parser.add_argument(
             '--create-dir',
