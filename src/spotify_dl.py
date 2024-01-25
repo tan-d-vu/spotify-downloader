@@ -42,6 +42,7 @@ DOWNLOADER_HEADERS = {
 PLAYLIST_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/playlist\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
 # In interactive mode, user is prompted upon first duplicate encountered
+# Otherwise, set via CLI arg
 skip_duplicate_downloads = False
 skip_duplicate_downloads_prompted = False
 
@@ -95,10 +96,22 @@ def get_track_data(track_id: str):
 
 def get_playlist_data(playlist_id: str):
     metadata_resp = _call_downloader_api(f"/metadata/playlist/{playlist_id}").json()
+
+    # For paginated response
+    track_list = []
+
     tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}").json()
+    
+    if not tracks_resp.get('trackList'):
+        return {}
+
+    track_list.extend(tracks_resp['trackList'])
+
+    while next_offset := tracks_resp.get('nextOffset'):
+        tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}?offset={next_offset}").json()
+        track_list.extend(tracks_resp['trackList'])
 
     if not metadata_resp['success']:
-        # print("[!] Bad URL. No playlist found.")
         return {}
 
     return {
@@ -110,7 +123,7 @@ def get_playlist_data(playlist_id: str):
                 album=track['album'],
                 id=track['id']
             )
-            for track in tracks_resp['trackList']
+            for track in track_list
         ]
     }
 
@@ -145,12 +158,14 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     no_ws = re.sub('\s', '', given_inp)
 
     for item in no_ws.split(','):
+
         if item.isnumeric():
             if int(item) > list_len:
                 print(f"Track number {item} does not exist.  Last track is number {list_len}")
                 continue
             # Subtract one for indexing
             indexes_or_slices.append(str(int(item) - 1))
+
         elif '-' in item:
             start, end = item.split('-')
             if not start:
@@ -160,8 +175,10 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
                 indexes_or_slices.append(f"{int(start) - 1}:")
             else:
                 indexes_or_slices.append(f"{int(start) - 1}:{end}")
+
         elif item == '*':
             indexes_or_slices.append(':')
+
         else:
             print(f'    [!] Invalid input: {item}')
 
@@ -215,7 +232,7 @@ def process_input_url(url: str, interactive: bool) -> list:
         playlist_resp_json = get_playlist_data(playlist_id)
 
         if not playlist_resp_json:
-            print(f"\t[!] Playlist not found{f' at {url}' if not interactive else ''}.")
+            print(f"\t[!] Playlist not found{f' at {url}' if not interactive else ''} or it is set to Private.")
             return []
 
         # print(f"\t{playlist_name} - {playlist_creator} ({len(playlist_tracks)} tracks)")
@@ -223,7 +240,13 @@ def process_input_url(url: str, interactive: bool) -> list:
 
         playlist_tracks = playlist_resp_json['trackList']
 
-        if not interactive:
+        if interactive:
+            track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+
+            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))):
+                track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+
+        else:
             if specified_track_nums := PLAYLIST_INPUT_URL_TRACK_NUMS_RE.match(url):
                 track_numbers_inp = specified_track_nums.group('track_nums')
             else:
@@ -236,12 +259,6 @@ def process_input_url(url: str, interactive: bool) -> list:
                 raise ValueError(
                     f"Invalid track number indentifer(s) given: '{specified_track_nums}'"
                 )
-
-        else:
-            track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
-
-            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))):
-                track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
 
         # Process input given for which tracks to download
         playlist_tracks_to_dl = []
@@ -273,7 +290,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
     resp_json = get_track_data(track_id)
 
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{track_title}.mp3")
-    
+
     if (dest_dir/track_filename).exists():
         if skip_duplicates:
             print(f"Skipping download for '{track_title}'...")
@@ -298,7 +315,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
                     if not dup_all_inp or dup_all_inp.lower().startswith('y'):
                         global skip_duplicate_downloads
                         skip_duplicate_downloads = True
-                        print("\nIgnoring all duplicate downloads.\n")
+                        print("\Skipping all duplicate downloads.\n")
 
                     skip_duplicate_downloads_prompted = True
 
@@ -382,31 +399,34 @@ def main():
         parser = ArgumentParser()
 
         parser.add_argument(
-            '--urls',
             '-u',
+            '--urls',
             nargs='+',
+            required=True,
             help="URL(s) of Sptofy songs or playlists to download.  "
                 "If a playlist is given, append \"|[TRACK NUMBERS]\" to URL to specify which tracks to download. "
                 "Example: 'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, "
                 "and fifteenth to the end. If not specified, all tracks are downloaded."
         )
         parser.add_argument(
-            '--output',
             '-o',
-            default=Path.home()/"Downloads",
+            '--output',
             type=Path,
-            help="Path to directory where tracks should be downloaded to."
+            default=Path.home()/"Downloads",
+            help="Path to directory where tracks should be downloaded to"
         )
         parser.add_argument(
+            '-c',
             '--create-dir',
             action='store_true',
             help="Create the output directory if it does not exist."
         )
         parser.add_argument(
+            '-s',
             '--skip-duplicate-downloads',
             action='store_true',
-            help="Don't download a song if the file already exists in the output directory.",
-            default=False
+            default=False,
+            help="Don't download a song if the file already exists in the output directory."
         )
 
         args = parser.parse_args()
@@ -458,7 +478,7 @@ def main():
 
     print("\nAll done.")
 
-    # Give a chance to see the messages if in running via executable
+    # Give a chance to see the messages if running via executable
     sleep(1)
     print("\nExiting...\n")
     sleep(3)
