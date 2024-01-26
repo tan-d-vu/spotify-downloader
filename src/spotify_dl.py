@@ -1,3 +1,4 @@
+import os
 import re
 import requests
 import signal
@@ -472,10 +473,21 @@ def main():
 
     print('-' * 32)
 
+    broken_tracks = []
     for track_id, track_title in list(dict.fromkeys(tracks_to_dl)):
-        download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
+        try:
+            download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
+        except Exception as exc:
+            broken_tracks.append(track_title)
 
     print("\nAll done.")
+
+    if broken_tracks:
+        nl = '\n'
+        print(
+            "[!] The following tracks could not be downloaded:\n"
+            f"  * {f'{nl}  * '.join(broken_tracks)}\n"
+        )
 
     # Give a chance to see the messages if running via executable
     sleep(1)
