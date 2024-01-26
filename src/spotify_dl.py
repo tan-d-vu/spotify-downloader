@@ -1,4 +1,3 @@
-import os
 import re
 import requests
 import signal
@@ -462,7 +461,7 @@ def main():
 
         global skip_duplicate_downloads
         skip_duplicate_downloads = args.skip_duplicate_downloads
-        
+
         debug_mode = args.debug
 
     print(f"\nTracks to download: {len(tracks_to_dl)}\n")
