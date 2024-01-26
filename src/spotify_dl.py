@@ -3,8 +3,10 @@ import re
 import requests
 import signal
 import sys
+import traceback
 from argparse import ArgumentParser
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from time import sleep
 
@@ -341,8 +343,9 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
     }
 
     if 'link' not in resp_json or 'metadata' not in resp_json:
+        print("\tDownload failed.")
         raise RuntimeError(
-            f"Bad response for track {track_title} ({track_id}): {resp_json}"
+            f"Bad response for track '{track_title}' ({track_id}): {resp_json}"
         )
 
     # For audio
@@ -392,6 +395,8 @@ def main():
 
             tracks_to_dl.extend(track_id_title_tuple_list)
 
+        debug_mode = False
+
     else:
         # CLI mode
         interactive = False
@@ -428,6 +433,12 @@ def main():
             default=False,
             help="Don't download a song if the file already exists in the output directory."
         )
+        parser.add_argument(
+            '--debug',
+            action='store_true',
+            default=False,
+            help="Debug mode."
+        )
 
         args = parser.parse_args()
 
@@ -451,6 +462,8 @@ def main():
 
         global skip_duplicate_downloads
         skip_duplicate_downloads = args.skip_duplicate_downloads
+        
+        debug_mode = args.debug
 
     print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
@@ -479,13 +492,16 @@ def main():
             download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
         except Exception as exc:
             broken_tracks.append(track_title)
+            if debug_mode:
+                with open('.spotify_dl_err.txt', 'a') as debug_fp:
+                    debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
 
     print("\nAll done.")
 
     if broken_tracks:
         nl = '\n'
         print(
-            "[!] The following tracks could not be downloaded:\n"
+            "\n[!] The following tracks could not be downloaded:\n"
             f"  * {f'{nl}  * '.join(broken_tracks)}\n"
         )
 
