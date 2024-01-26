@@ -162,8 +162,10 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     for item in no_ws.split(','):
 
         if item.isnumeric():
-            if int(item) > list_len:
+            if int(item) > list_len and int(item) >= 1:
                 print(f"Track number {item} does not exist.  Last track is number {list_len}")
+                continue
+            if int(item) <= 0:  #user inputs 0 or less                                         
                 continue
             # Subtract one for indexing
             indexes_or_slices.append(str(int(item) - 1))
