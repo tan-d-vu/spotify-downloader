@@ -503,6 +503,7 @@ def main():
             "\n[!] The following tracks could not be downloaded:\n"
             f"  * {f'{nl}  * '.join(broken_tracks)}\n"
         )
+        input("\nPress [ENTER] to exit.\n")
 
     # Give a chance to see the messages if running via executable
     sleep(1)
