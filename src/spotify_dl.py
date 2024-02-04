@@ -1,3 +1,4 @@
+import json
 import re
 import requests
 import signal
@@ -83,6 +84,14 @@ def _call_downloader_api(
     return resp
 
 
+def validate_config_file(config_file: Path) -> list:
+    # TODO: validate entries
+    with open(config_file) as config_fp:
+        loaded_config = json.load(config_fp)
+
+    return loaded_config
+
+
 def get_track_data(track_id: str):
     resp = _call_downloader_api(f"/download/{track_id}")
 
@@ -153,12 +162,71 @@ def get_spotify_playlist(playlist_id: str, token: str):
     return playlist['name'], playlist['owner']['display_name'], tracks_list
 
 
+def get_tracks_to_download(interactive: bool, cli_arg_urls: list = None) -> list:
+    tracks_to_dl = []
+
+    if interactive:
+        print("Enter URL for Spotify track to download, a playlist to download from, or press [ENTER] with an empty line when done.")
+
+        while url := input("> "):
+            track_id_title_tuple_list = process_input_url(url, interactive)
+
+            if not track_id_title_tuple_list:
+                continue
+
+            tracks_to_dl.extend(track_id_title_tuple_list)
+
+    else:
+        for url in cli_arg_urls:
+            track_id_title_tuple_list = process_input_url(url, interactive)
+
+            if not track_id_title_tuple_list:
+                continue
+
+            tracks_to_dl.extend(track_id_title_tuple_list)
+
+    return tracks_to_dl
+
+
+def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_dir: bool = None) -> None:
+    default_output_dir = Path.home()/'Downloads'
+
+    if interactive:
+        output_dir = default_output_dir
+        print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
+
+        if other_dir := input("(New download location?) "):
+            output_dir = Path(other_dir)
+
+        while not output_dir.is_dir():
+            mkdir_inp = input(f"The directory '{output_dir.absolute()}' does not exist.  Would you like to create it? [y/n]: ")
+            if mkdir_inp.lower() == 'y':
+                output_dir.mkdir(parents=True)
+            else:
+                output_dir = Path(input("\nNew download location: "))
+
+    else:
+        output_dir = cli_arg_output_dir
+
+        if not output_dir.is_dir():
+            if cli_arg_create_dir:
+                output_dir.mkdir(parents=True)
+            else:
+                raise ValueError(
+                    f"Specified directory '{output_dir}' is not a valid directory."
+                )
+
+    return output_dir
+
+
 def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     indexes_or_slices = []
     # Remove whitespace
     no_ws = re.sub('\s', '', given_inp)
 
     for item in no_ws.split(','):
+
+        # TODO: allow negative to get last n songs?
 
         if item.isnumeric(): # ensure the user inputs a valid number in the playlist range
             if not (1 <= int(item) <= list_len):
@@ -292,8 +360,10 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
 
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{track_title}.mp3")
 
+    global skip_duplicate_downloads
+
     if (dest_dir/track_filename).exists():
-        if skip_duplicates:
+        if skip_duplicates or skip_duplicate_downloads:
             print(f"Skipping download for '{track_title}'...")
             return
 
@@ -314,9 +384,8 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
                     )
 
                     if not dup_all_inp or dup_all_inp.lower().startswith('y'):
-                        global skip_duplicate_downloads
                         skip_duplicate_downloads = True
-                        print("\Skipping all duplicate downloads.\n")
+                        print("\nSkipping all duplicate downloads.\n")
 
                     skip_duplicate_downloads_prompted = True
 
@@ -369,123 +438,20 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
 
     print("\tDone.")
 
-def main():
-    print('', '=' * 48, '||          Spotify Song Downloader           ||', '=' * 48, sep='\n', end='\n\n')
 
-    # # Grab token anyway
-    # token_resp = requests.get("https://open.spotify.com/get_access_token")
-    # # clientId, accessToken
-    # token = token_resp.json()['accessToken']
-
-    tracks_to_dl = []
-
-    # No given args
-    if len(sys.argv) == 1:
-        # Interactive mode
-        interactive = True
-
-        print("Enter URL for Spotify track to download, a playlist to download from, or press [ENTER] with an empty line when done.")
-
-        while url := input("> "):
-            track_id_title_tuple_list = process_input_url(url, interactive)
-
-            if not track_id_title_tuple_list:
-                continue
-
-            tracks_to_dl.extend(track_id_title_tuple_list)
-
-        debug_mode = False
-
-    else:
-        # CLI mode
-        interactive = False
-
-        parser = ArgumentParser()
-
-        parser.add_argument(
-            '-u',
-            '--urls',
-            nargs='+',
-            required=True,
-            help="URL(s) of Sptofy songs or playlists to download.  "
-                "If a playlist is given, append \"|[TRACK NUMBERS]\" to URL to specify which tracks to download. "
-                "Example: 'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, "
-                "and fifteenth to the end. If not specified, all tracks are downloaded."
-        )
-        parser.add_argument(
-            '-o',
-            '--output',
-            type=Path,
-            default=Path.home()/"Downloads",
-            help="Path to directory where tracks should be downloaded to"
-        )
-        parser.add_argument(
-            '-c',
-            '--create-dir',
-            action='store_true',
-            help="Create the output directory if it does not exist."
-        )
-        parser.add_argument(
-            '-s',
-            '--skip-duplicate-downloads',
-            action='store_true',
-            default=False,
-            help="Don't download a song if the file already exists in the output directory."
-        )
-        parser.add_argument(
-            '--debug',
-            action='store_true',
-            default=False,
-            help="Debug mode."
-        )
-
-        args = parser.parse_args()
-
-        output_dir = args.output
-
-        if not output_dir.is_dir():
-            if args.create_dir:
-                output_dir.mkdir(parents=True)
-            else:
-                raise ValueError(
-                    f"Specified directory '{output_dir}' is not a valid directory."
-                )
-
-        for url in args.urls:
-            track_id_title_tuple_list = process_input_url(url, interactive)
-
-            if not track_id_title_tuple_list:
-                continue
-
-            tracks_to_dl.extend(track_id_title_tuple_list)
-
-        global skip_duplicate_downloads
-        skip_duplicate_downloads = args.skip_duplicate_downloads
-
-        debug_mode = args.debug
-
-    print(f"\nTracks to download: {len(tracks_to_dl)}\n")
-
-    if interactive:
-        output_dir = Path.home()/'Downloads'
-
-        print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
-
-        if other_dir := input("(New download location?) "):
-            output_dir = Path(other_dir)
-
-        while not output_dir.is_dir():
-            mkdir_inp = input(f"The directory '{output_dir.absolute()}' does not exist.  Would you like to create it? [y/n]: ")
-            if mkdir_inp.lower() == 'y':
-                output_dir.mkdir(parents=True)
-            else:
-                output_dir = Path(input("\nNew download location: "))
-
+def download_all_tracks(
+    tracks_to_dl: list,
+    output_dir: Path,
+    interactive: bool,
+    skip_duplicate_downloads: bool,
+    debug_mode: bool = False
+) -> list:
     print(f"\nDownloading to '{output_dir.absolute()}'.\n")
 
     print('-' * 32)
 
     broken_tracks = []
+
     for track_id, track_title in list(dict.fromkeys(tracks_to_dl)):
         try:
             download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
@@ -496,6 +462,143 @@ def main():
                     debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
 
     print("\nAll done.")
+    if broken_tracks:
+        print("[!} Some tracks failed to download.")
+
+    return broken_tracks
+
+
+def parse_args():
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        '-u',
+        '--urls',
+        nargs='+',
+        help="URL(s) of Sptofy songs or playlists to download.  "
+            "If a playlist is given, append \"|[TRACK NUMBERS]\" to URL to specify which tracks to download. "
+            "Example: 'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, "
+            "and fifteenth to the end. If not specified, all tracks are downloaded."
+    )
+    parser.add_argument(
+        '-o',
+        '--output',
+        type=Path,
+        default=Path.home()/"Downloads",
+        help="Path to directory where tracks should be downloaded to"
+    )
+    parser.add_argument(
+        '-c',
+        '--create-dir',
+        action='store_true',
+        help="Create the output directory if it does not exist."
+    )
+    parser.add_argument(
+        '-s',
+        '--skip-duplicate-downloads',
+        action='store_true',
+        default=False,
+        help="Don't download a song if the file already exists in the output directory."
+    )
+    parser.add_argument(
+        '-k',
+        '--config-file',
+        type=Path,
+        help="Path to JSON containing download instructions."
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        default=False,
+        help="Debug mode."
+    )
+
+    return parser.parse_args()
+
+
+def spotify_downloader(
+    interactive: bool,
+    urls: list = None,
+    output_dir: Path = None,
+    create_dir: bool = None,
+    skip_duplicate_downloads: bool = None,
+    debug_mode: bool = None
+):
+    tracks_to_dl = get_tracks_to_download(interactive, urls)
+
+    print(f"\nTracks to download: {len(tracks_to_dl)}\n")
+
+    output_dir = set_output_dir(interactive, output_dir, create_dir)
+
+    return download_all_tracks(
+        tracks_to_dl,
+        output_dir,
+        interactive,
+        skip_duplicate_downloads,
+        debug_mode
+    )
+
+
+def main():
+    print('', '=' * 48, '||          Spotify Song Downloader           ||', '=' * 48, sep='\n', end='\n\n')
+
+    # # Grab token anyway
+    # token_resp = requests.get("https://open.spotify.com/get_access_token")
+    # # clientId, accessToken
+    # token = token_resp.json()['accessToken']
+
+    # No given args
+    if len(sys.argv) == 1:
+        # Interactive mode
+        interactive = True
+
+        broken_tracks = spotify_downloader(
+            interactive=interactive,
+            output_dir=None,
+            urls=None,
+            create_dir=None,
+            debug_mode=None
+        )
+
+    else:
+        # CLI mode
+        interactive = False
+
+        args = parse_args()
+
+        if not (config_file := args.config_file):
+
+            if not (urls := args.urls):
+                raise ValueError(
+                    "The '-u'/'--urls' argument must be "
+                    "supplied if not using a config file"
+                )
+
+            broken_tracks = spotify_downloader(
+                interactive=interactive,
+                output_dir=args.output,
+                urls=urls,
+                create_dir=args.create_dir,
+                skip_duplicate_downloads=args.skip_duplicate_downloads,
+                debug_mode=args.debug
+            )
+
+        else:
+            loaded_config = validate_config_file(config_file)
+
+            broken_tracks = []
+
+            for entry in loaded_config:
+                broken_tracks.extend(
+                    spotify_downloader(
+                        interactive=interactive,
+                        output_dir=Path(entry.get('output_dir')),
+                        urls=[entry['url']],
+                        create_dir=entry.get('create_dir'),
+                        skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
+                        debug_mode=args.debug
+                    )
+                )
 
     if broken_tracks:
         nl = '\n'
@@ -503,7 +606,8 @@ def main():
             "\n[!] The following tracks could not be downloaded:\n"
             f"  * {f'{nl}  * '.join(broken_tracks)}\n"
         )
-        input("\nPress [ENTER] to exit.\n")
+        if interactive:
+            input("\nPress [ENTER] to exit.\n")
 
     # Give a chance to see the messages if running via executable
     sleep(1)
