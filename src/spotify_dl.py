@@ -463,7 +463,7 @@ def download_all_tracks(
 
     print("\nAll done.")
     if broken_tracks:
-        print("[!} Some tracks failed to download.")
+        print("[!] Some tracks failed to download.")
 
     return broken_tracks
 
