@@ -422,7 +422,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
 
     if not audio_dl_resp.ok:
         raise RuntimeError(
-            f"Bad download response for track '{track_title}' ({track_id}): {audio_dl_resp}"
+            f"Bad download response for track '{track_title}' ({track_id}): {audio_dl_resp.content}"
         )
 
     with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
