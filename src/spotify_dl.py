@@ -420,6 +420,11 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
     hdrs['Host'] = resp_json['link'].split('/')[2]
     audio_dl_resp = requests.get(resp_json['link'], headers=hdrs)
 
+    if not audio_dl_resp.ok:
+        raise RuntimeError(
+            f"Bad download response for track '{track_title}' ({track_id}): {audio_dl_resp}"
+        )
+
     with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
         track_mp3_fp.write(audio_dl_resp.content)
 
