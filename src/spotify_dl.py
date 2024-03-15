@@ -455,9 +455,11 @@ def download_all_tracks(
 
     print('-' * 32)
 
+    tracks = list(dict.fromkeys(tracks_to_dl))
     broken_tracks = []
 
-    for track_id, track_title in list(dict.fromkeys(tracks_to_dl)):
+    for idx, (track_id, track_title) in enumerate(tracks, start=1):
+        print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
         try:
             download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
         except Exception as exc:
