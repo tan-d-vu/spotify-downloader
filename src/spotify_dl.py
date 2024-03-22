@@ -355,9 +355,6 @@ def process_input_url(url: str, interactive: bool) -> list:
 
 
 def download_track(track_id, track_title, dest_dir: Path, interactive: bool, skip_duplicates: bool):
-    # Grab a fresh download link since the one was got may have expired
-    resp_json = get_track_data(track_id)
-
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{track_title}.mp3")
 
     global skip_duplicate_downloads
@@ -392,6 +389,9 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
                 return
 
     print(f"Downloading: '{track_title}'...")
+
+    # Grab a fresh download link since the one was got may have expired
+    resp_json = get_track_data(track_id)
 
     # Clean browser heads for API
     hdrs = {
