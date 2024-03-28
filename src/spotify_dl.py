@@ -111,7 +111,7 @@ def get_playlist_data(playlist_id: str):
     track_list = []
 
     tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}").json()
-    
+
     if not tracks_resp.get('trackList'):
         return {}
 
@@ -360,6 +360,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
     global skip_duplicate_downloads
 
     if (dest_dir/track_filename).exists():
+
         if skip_duplicates or skip_duplicate_downloads:
             print(f"Skipping download for '{track_title}'...")
             return
@@ -459,7 +460,9 @@ def download_all_tracks(
     broken_tracks = []
 
     for idx, (track_id, track_title) in enumerate(tracks, start=1):
+
         print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
+
         try:
             download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
         except Exception as exc:
@@ -616,6 +619,7 @@ def main():
             "\n[!] The following tracks could not be downloaded:\n"
             f"  * {f'{nl}  * '.join(broken_tracks)}\n"
         )
+
         if interactive:
             input("\nPress [ENTER] to exit.\n")
 
