@@ -468,6 +468,9 @@ def download_all_tracks(
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
                     debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
 
+        # Prevent API throttling
+        sleep(0.1)
+
     print("\nAll done.")
     if broken_tracks:
         print("[!] Some tracks failed to download.")
