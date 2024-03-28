@@ -472,7 +472,7 @@ def download_all_tracks(
                     debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
 
         # Prevent API throttling
-        sleep(0.1)
+        sleep(0.01)
 
     print("\nAll done.")
     if broken_tracks:
