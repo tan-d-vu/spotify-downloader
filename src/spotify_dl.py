@@ -442,6 +442,9 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
 
         mp3_file.tag.save()
 
+    # Prevent API throttling
+    sleep(0.1)
+
     print("\tDone.")
 
 
@@ -470,9 +473,6 @@ def download_all_tracks(
             if debug_mode:
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
                     debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
-
-        # Prevent API throttling
-        sleep(0.01)
 
     print("\nAll done.")
     if broken_tracks:
