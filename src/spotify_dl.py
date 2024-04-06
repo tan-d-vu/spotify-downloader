@@ -111,7 +111,7 @@ def get_playlist_data(playlist_id: str):
     track_list = []
 
     tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}").json()
-
+    
     if not tracks_resp.get('trackList'):
         return {}
 
@@ -354,39 +354,42 @@ def process_input_url(url: str, interactive: bool) -> list:
     return track_id_title_tuples
 
 
-def download_track(track_id, track_title, dest_dir: Path, interactive: bool, skip_duplicates: bool):
+def download_track(track_id, track_title, dest_dir: Path, interactive: bool = False, skip_duplicates: bool = False):
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{track_title}.mp3")
 
     global skip_duplicate_downloads
+    global skip_duplicate_downloads_prompted
 
     if (dest_dir/track_filename).exists():
-
         if skip_duplicates or skip_duplicate_downloads:
             print(f"Skipping download for '{track_title}'...")
             return
 
-        if interactive:
+        if interactive and not skip_duplicate_downloads_prompted:
             dup_song_inp = input(
                 f"The song '{track_title}' was already downloaded to {dest_dir.absolute()}.\n"
                 "  Would you like to download it again? [y/N]: "
             )
 
-            if not dup_song_inp or dup_song_inp.lower().startswith('n'):
+            if skip_this_dl := (not dup_song_inp or dup_song_inp.lower().startswith('n')):
                 print("\nSkipping download.\n")
+                # Prompt user if we haven't yet before skipping this one
 
-                global skip_duplicate_downloads_prompted
+            if not skip_duplicate_downloads_prompted:
+                dup_all_inp = input(
+                    "  Would you like to re-download songs that have already been downloaded? [y/N]: "
+                )
 
-                if not skip_duplicate_downloads_prompted:
-                    dup_all_inp = input(
-                        "Would you like to ignore all songs that have already been downloaded? [Y/n]: "
-                    )
+                if not dup_all_inp or dup_all_inp.lower().startswith('n'):
+                    skip_duplicate_downloads = True
+                    print("\nSkipping duplicate downloads.\n")
+                else:
+                    skip_duplicate_downloads = False
+                    print("\nRe-downloading all tracks.\n")
 
-                    if not dup_all_inp or dup_all_inp.lower().startswith('y'):
-                        skip_duplicate_downloads = True
-                        print("\nSkipping all duplicate downloads.\n")
+                skip_duplicate_downloads_prompted = True
 
-                    skip_duplicate_downloads_prompted = True
-
+            if skip_this_dl:
                 return
 
     print(f"Downloading: '{track_title}'...")
@@ -442,7 +445,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool, ski
 
         mp3_file.tag.save()
 
-    # Prevent API throttling
+    # prevent API throttling
     sleep(0.1)
 
     print("\tDone.")
@@ -463,20 +466,50 @@ def download_all_tracks(
     broken_tracks = []
 
     for idx, (track_id, track_title) in enumerate(tracks, start=1):
-
         print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
-
         try:
             download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
         except Exception as exc:
-            broken_tracks.append(track_title)
+            broken_tracks.append((track_id, track_title, output_dir))
             if debug_mode:
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
                     debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
 
-    print("\nAll done.")
+    print("\nAll done.\n")
     if broken_tracks:
         print("[!] Some tracks failed to download.")
+
+    return broken_tracks
+
+
+def spotify_downloader(
+    interactive: bool,
+    urls: list = None,
+    output_dir: Path = None,
+    create_dir: bool = None,
+    skip_duplicate_downloads: bool = None,
+    debug_mode: bool = None
+):
+    loop_prompt = True
+    
+    broken_tracks = []
+    while loop_prompt and (tracks_to_dl := get_tracks_to_download(interactive, urls)):
+
+        print(f"\nTracks to download: {len(tracks_to_dl)}\n")
+
+        output_dir = set_output_dir(interactive, output_dir, create_dir)
+
+        broken_tracks.extend(
+            download_all_tracks(
+                tracks_to_dl,
+                output_dir,
+                interactive,
+                skip_duplicate_downloads,
+                debug_mode
+            )
+        )
+        if not interactive:
+            loop_prompt = False
 
     return broken_tracks
 
@@ -520,6 +553,11 @@ def parse_args():
         help="Path to JSON containing download instructions."
     )
     parser.add_argument(
+        '--retry-failed-downloads',
+        type=int,
+        help="Number of times to retry failed downloads."
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         default=False,
@@ -527,29 +565,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
-
-def spotify_downloader(
-    interactive: bool,
-    urls: list = None,
-    output_dir: Path = None,
-    create_dir: bool = None,
-    skip_duplicate_downloads: bool = None,
-    debug_mode: bool = None
-):
-    tracks_to_dl = get_tracks_to_download(interactive, urls)
-
-    print(f"\nTracks to download: {len(tracks_to_dl)}\n")
-
-    output_dir = set_output_dir(interactive, output_dir, create_dir)
-
-    return download_all_tracks(
-        tracks_to_dl,
-        output_dir,
-        interactive,
-        skip_duplicate_downloads,
-        debug_mode
-    )
 
 
 def main():
@@ -617,8 +632,29 @@ def main():
         nl = '\n'
         print(
             "\n[!] The following tracks could not be downloaded:\n"
-            f"  * {f'{nl}  * '.join(broken_tracks)}\n"
+            f"  * {f'{nl}  * '.join(t_title for t_id, t_title, out_dir in broken_tracks)}\n"
         )
+
+        if not interactive:
+            num_retries = args.retry_failed_downloads or 0
+        else:
+            resp = input("Would you like to retry downloading these tracks? [y/N]\n")
+            if resp.lower() == 'y':
+                # Input handling needed here
+                num_retries = int(input("How many attempts?\n"))
+
+        if num_retries:
+            print("Re-attempting to download tracks")
+            for i in range(num_retries):
+                print(f"Attempt {i + 1} of {num_retries}") 
+                for track_id, track_title, output_dir in broken_tracks.copy():
+                    try:
+                        download_track(track_id, track_title, output_dir)
+                    except Exception:
+                        continue
+                    else:
+                        broken_tracks.remove((track_id, track_title, output_dir))
+                sleep(1)
 
         if interactive:
             input("\nPress [ENTER] to exit.\n")
