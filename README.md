@@ -1,7 +1,8 @@
 # spotify-downloader
+
 Spotify song downloader using API created by spotifydown.com
 
-The script `src/spotify_dl.py` can be run in interactive mode or CLI mode.  
+The script `src/spotify_dl.py` can be run in interactive mode or CLI mode.
 
 ## Interactive mode
 
@@ -10,12 +11,15 @@ When run without any arguments, interactive mode is used.  The user is prompted 
 ## CLI mode
 
 ```shell
-usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-o OUTPUT] [-c] [-s] [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--debug]
+usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f TEMPLATE] [-o OUTPUT] [-c] [-s] [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--debug]
 
 optional arguments:
   -u URLS [URLS ...], --urls URLS [URLS ...]
                         URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
                         'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
+  -f TEMPLATE, --filename TEMPLATE
+                        Specify custom filename. Use the following tags inside quotation marks: {artist}, {title}, {id}
+			Example: --filename "{id} - {title}". If not specified, filename = "{artist} - {title}"
   -o OUTPUT, --output OUTPUT
                         Path to directory where tracks should be downloaded to
   -c, --create-dir      Create the output directory if it does not exist.
@@ -31,6 +35,7 @@ optional arguments:
 ### Config file
 
 Example of JSON file used to contain download instructions:
+
 ```json
 [
   {
@@ -39,7 +44,8 @@ Example of JSON file used to contain download instructions:
   {
     "url": "https://open.spotify.com/playlist/mYpl4YLi5T2",
     "output_dir": "/path/to/dir/",
-    "create_dir": true
+    "create_dir": true,
+    "filename_template": "{id} - {artist} - {title}"
   },
   {
     "url": "https://open.spotify.com/playlist/mYpl4YLi5T3",
