@@ -229,7 +229,7 @@ def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_d
 def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     indexes_or_slices = []
     # Remove whitespace
-    no_ws = re.sub('\s', '', given_inp)
+    no_ws = re.sub(r'\s', '', given_inp)
 
     for item in no_ws.split(','):
 
