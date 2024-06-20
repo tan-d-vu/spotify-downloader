@@ -104,21 +104,21 @@ def get_track_data(track_id: str):
     return resp_json
 
 
-def get_playlist_data(playlist_id: str):
-    metadata_resp = _call_downloader_api(f"/metadata/playlist/{playlist_id}").json()
+def get_multi_track_data(entity_id: str, entity_type: str):
+    metadata_resp = _call_downloader_api(f"/metadata/{entity_type}/{entity_id}").json()
 
     # For paginated response
     track_list = []
 
-    tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}").json()
-    
+    tracks_resp = _call_downloader_api(f"/trackList/{entity_type}/{entity_id}").json()
+
     if not tracks_resp.get('trackList'):
         return {}
 
     track_list.extend(tracks_resp['trackList'])
 
     while next_offset := tracks_resp.get('nextOffset'):
-        tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}?offset={next_offset}").json()
+        tracks_resp = _call_downloader_api(f"/trackList/{entity_type}/{entity_id}?offset={next_offset}").json()
         track_list.extend(tracks_resp['trackList'])
 
     if not metadata_resp['success']:
@@ -130,7 +130,7 @@ def get_playlist_data(playlist_id: str):
             SpotifySong(
                 title=track['title'],
                 artist=track['artists'],
-                album=track['album'],
+                album=track['album'] if entity_type == "playlist" else metadata_resp['title'],
                 id=track['id']
             )
             for track in track_list
@@ -257,12 +257,12 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     return indexes_or_slices
 
 
-def get_playlist_track_nums_input(playlist_tracks: list) -> list:
+def get_track_nums_input(tracks: list, entity_type: str) -> list:
     track_numbers_inp = None
 
     while not track_numbers_inp:
         track_numbers_inp = input('\n'
-            "    Enter 'show' to list the playlist tracks, the track numbers to download, or '*' to download all:\n"
+            f"    Enter 'show' to list the {entity_type} tracks, the track numbers to download, or '*' to download all:\n"
             "      Example: '1, 4, 15-' to download the first, fourth, and fifteenth to the end\n"
             "  > "
         )
@@ -270,7 +270,7 @@ def get_playlist_track_nums_input(playlist_tracks: list) -> list:
         if 'show' in track_numbers_inp.lower():
             print(
                 '\n    ',
-                '\n    '.join(f"{ind + 1:>4}| {track.title} - {track.artist}" for ind, track in enumerate(playlist_tracks)),
+                '\n    '.join(f"{ind + 1:>4}| {track.title} - {track.artist}" for ind, track in enumerate(tracks)),
                 '\n',
                 sep=''
             )
@@ -294,35 +294,43 @@ def process_input_url(url: str, interactive: bool) -> list:
 
         track_id_title_tuples.append((track_resp_json['metadata']['id'], track_title))
 
-    elif "/playlist/" in url:
-        playlist_id = url.split('/')[-1].split('?')[0].split('|')[0]
+    elif "/playlist/" in url or "/album/" in url:
+        entity_id = url.split('/')[-1].split('?')[0].split('|')[0]
+
+        if "/playlist/" in url:
+            entity_type = "playlist"
+        else:
+            entity_type = "album"
 
         # playlist_name, playlist_creator, playlist_tracks = get_spotify_playlist(playlist_id, token)
-        playlist_resp_json = get_playlist_data(playlist_id)
+        multi_track_resp_json = get_multi_track_data(entity_id, entity_type)
 
-        if not playlist_resp_json:
-            print(f"\t[!] Playlist not found{f' at {url}' if not interactive else ''} or it is set to Private.")
+        if not multi_track_resp_json:
+            print(
+                f"\t[!] {entity_type.capitalize()} not found{f' at {url}' if not interactive else ''}"
+                f"{' or it is set to Private' if entity_type == 'playlist' else ''}."
+            )
             return []
 
         # print(f"\t{playlist_name} - {playlist_creator} ({len(playlist_tracks)} tracks)")
-        print(f"\t{playlist_resp_json['title']} - {playlist_resp_json['artists']} ({len(playlist_resp_json['trackList'])} tracks)")
+        print(f"\t{multi_track_resp_json['title']} - {multi_track_resp_json['artists']} ({len(multi_track_resp_json['trackList'])} tracks)")
 
-        playlist_tracks = playlist_resp_json['trackList']
+        album_or_playlist_tracks = multi_track_resp_json['trackList']
 
         if interactive:
-            track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+            track_numbers_inp = get_track_nums_input(album_or_playlist_tracks, entity_type)
 
-            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))):
-                track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))):
+                track_numbers_inp = get_track_nums_input(album_or_playlist_tracks)
 
         else:
             if specified_track_nums := PLAYLIST_INPUT_URL_TRACK_NUMS_RE.match(url):
                 track_numbers_inp = specified_track_nums.group('track_nums')
             else:
-                # Default to downloading whole playlist
+                # Default to downloading whole playlist/album
                 track_numbers_inp = '*'
 
-            indexes_or_slices = track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))
+            indexes_or_slices = track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))
 
             if not indexes_or_slices:
                 raise ValueError(
@@ -330,20 +338,20 @@ def process_input_url(url: str, interactive: bool) -> list:
                 )
 
         # Process input given for which tracks to download
-        playlist_tracks_to_dl = []
+        tracks_to_dl = []
         for index_or_slice in indexes_or_slices:
 
             if index_or_slice.isnumeric():
-                playlist_tracks_to_dl.append(playlist_tracks[int(index_or_slice)])
+                tracks_to_dl.append(album_or_playlist_tracks[int(index_or_slice)])
             else:
-                playlist_tracks_to_dl.extend(
-                    eval(f"playlist_tracks[{index_or_slice}]")
+                tracks_to_dl.extend(
+                    eval(f"album_or_playlist_tracks[{index_or_slice}]")
                 )
 
-        for track in sorted(dict.fromkeys(playlist_tracks_to_dl), key=playlist_tracks.index):
+        for track in sorted(dict.fromkeys(tracks_to_dl), key=album_or_playlist_tracks.index):
 
             track_title = _get_track_local_title(track.title, track.artist)
-            print(f"\t{playlist_tracks.index(track) + 1:>4}| {track_title}")
+            print(f"\t{album_or_playlist_tracks.index(track) + 1:>4}| {track_title}")
 
             track_id_title_tuples.append((track.id, track_title))
 
