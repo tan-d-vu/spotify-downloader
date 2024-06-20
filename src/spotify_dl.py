@@ -5,6 +5,7 @@ import signal
 import sys
 import traceback
 from argparse import ArgumentParser
+from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -41,7 +42,7 @@ DOWNLOADER_HEADERS = {
     'TE': 'trailers'
 }
 
-PLAYLIST_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/playlist\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
+MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
 # In interactive mode, user is prompted upon first duplicate encountered
 # Otherwise, set via CLI arg
@@ -56,6 +57,13 @@ class SpotifySong:
     album: str
     id: str
     url = f"https://open.spotify.com/track/{id}"
+
+
+def parse_cfg(cfg_path: Path) -> ConfigParser:
+    parser = ConfigParser()
+    parser.read(cfg_path)
+
+    return parser
 
 
 def _get_track_local_title(title: str, artist: str) -> str:
@@ -191,6 +199,10 @@ def get_tracks_to_download(interactive: bool, cli_arg_urls: list = None) -> list
 def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_dir: bool = None) -> None:
     default_output_dir = Path.home()/'Downloads'
 
+    if (spotify_dl_cfg_path := Path.home()/".spotify_dl.cfg").is_file():
+        spotify_dl_cfg = parse_cfg(spotify_dl_cfg_path)
+        default_output_dir = spotify_dl_cfg.get("Settings", "default_download_location", fallback=default_output_dir)
+
     if interactive:
         output_dir = default_output_dir
         print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
@@ -324,7 +336,7 @@ def process_input_url(url: str, interactive: bool) -> list:
                 track_numbers_inp = get_track_nums_input(album_or_playlist_tracks)
 
         else:
-            if specified_track_nums := PLAYLIST_INPUT_URL_TRACK_NUMS_RE.match(url):
+            if specified_track_nums := MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE.match(url):
                 track_numbers_inp = specified_track_nums.group('track_nums')
             else:
                 # Default to downloading whole playlist/album
