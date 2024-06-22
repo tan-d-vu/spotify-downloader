@@ -58,12 +58,9 @@ class SpotifySong:
     url = f"https://open.spotify.com/track/{id}"
 
 
-# def _get_track_local_title(title: str, artist: str) -> str:
-#     return f"{title} - {artist}"
-
-def assemble_track_custom_title(title: str, artist: str = "", id: int = 1,
+def assemble_track_custom_title(title: str, artist: str = "", track_num: int = 1,
                                 template: str = r"{artist} - {title}") -> str:
-    template = template.replace(r"{id}", str(id), 1)
+    template = template.replace(r"{track_num}", str(track_num), 1)
     template = template.replace(r"{title}", title, 1)
     template = template.replace(r"{artist}", artist, 1)
 
@@ -296,8 +293,12 @@ def process_input_url(url: str, filename_template: str, interactive: bool) -> li
             print(f"\t[!] Song not found{f' at {url}' if not interactive else ''}.")
             return []
 
-        track_title = assemble_track_custom_title(track_resp_json['metadata']['title'], track_resp_json['metadata']['artists'], 0, filename_template)
-        #= _get_track_local_title(track_resp_json['metadata']['title'], track_resp_json['metadata']['artists'])
+        track_title = assemble_track_custom_title(
+            title=track_resp_json['metadata']['title'],
+            artist=track_resp_json['metadata']['artists'],
+            track_num=0,
+            template=filename_template
+        )
 
         print(f"\t{track_title}")
 
@@ -351,9 +352,13 @@ def process_input_url(url: str, filename_template: str, interactive: bool) -> li
 
         for index, track in enumerate(sorted(playlist_tracks_to_dl, key=playlist_tracks.index)):
 
-            #track_title = _get_track_local_title(track.title, track.artist)
-            track_title = assemble_track_custom_title(track.title, track.artist, index+1, filename_template)
-        
+            track_title = assemble_track_custom_title(
+                title=track.title,
+                artist=track.artist,
+                track_num=index+1,
+                template=filename_template
+            )
+
             print(f"\t{index + 1:>4}| {track_title}")
 
             track_id_title_tuples.append((track.id, track_title))
