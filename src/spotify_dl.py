@@ -58,9 +58,13 @@ class SpotifySong:
     url = f"https://open.spotify.com/track/{id}"
 
 
-def _get_track_local_title(title: str, artist: str) -> str:
-    return f"{title} - {artist}"
+def assemble_track_custom_title(title: str, artist: str = "", track_num: int = 1,
+                                template: str = r"{artist} - {title}") -> str:
+    template = template.replace(r"{track_num}", str(track_num), 1)
+    template = template.replace(r"{title}", title, 1)
+    template = template.replace(r"{artist}", artist, 1)
 
+    return template
 
 def _call_downloader_api(
     endpoint: str,
@@ -162,14 +166,14 @@ def get_spotify_playlist(playlist_id: str, token: str):
     return playlist['name'], playlist['owner']['display_name'], tracks_list
 
 
-def get_tracks_to_download(interactive: bool, cli_arg_urls: list = None) -> list:
+def get_tracks_to_download(interactive: bool, filename_template, cli_arg_urls: list = None) -> list:
     tracks_to_dl = []
 
     if interactive:
         print("Enter URL for Spotify track to download, a playlist to download from, or press [ENTER] with an empty line when done.")
 
         while url := input("> "):
-            track_id_title_tuple_list = process_input_url(url, interactive)
+            track_id_title_tuple_list = process_input_url(url, filename_template, interactive)
 
             if not track_id_title_tuple_list:
                 continue
@@ -178,7 +182,7 @@ def get_tracks_to_download(interactive: bool, cli_arg_urls: list = None) -> list
 
     else:
         for url in cli_arg_urls:
-            track_id_title_tuple_list = process_input_url(url, interactive)
+            track_id_title_tuple_list = process_input_url(url, filename_template, interactive)
 
             if not track_id_title_tuple_list:
                 continue
@@ -222,7 +226,7 @@ def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_d
 def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     indexes_or_slices = []
     # Remove whitespace
-    no_ws = re.sub('\s', '', given_inp)
+    no_ws = re.sub(r'\s', '', given_inp)
 
     for item in no_ws.split(','):
 
@@ -279,7 +283,7 @@ def get_playlist_track_nums_input(playlist_tracks: list) -> list:
     return track_numbers_inp
 
 
-def process_input_url(url: str, interactive: bool) -> list:
+def process_input_url(url: str, filename_template: str, interactive: bool) -> list:
     track_id_title_tuples = []
 
     if "/track/" in url:
@@ -289,7 +293,13 @@ def process_input_url(url: str, interactive: bool) -> list:
             print(f"\t[!] Song not found{f' at {url}' if not interactive else ''}.")
             return []
 
-        track_title = _get_track_local_title(track_resp_json['metadata']['title'], track_resp_json['metadata']['artists'])
+        track_title = assemble_track_custom_title(
+            title=track_resp_json['metadata']['title'],
+            artist=track_resp_json['metadata']['artists'],
+            track_num=0,
+            template=filename_template
+        )
+
         print(f"\t{track_title}")
 
         track_id_title_tuples.append((track_resp_json['metadata']['id'], track_title))
@@ -340,10 +350,16 @@ def process_input_url(url: str, interactive: bool) -> list:
                     eval(f"playlist_tracks[{index_or_slice}]")
                 )
 
-        for track in sorted(dict.fromkeys(playlist_tracks_to_dl), key=playlist_tracks.index):
+        for index, track in enumerate(sorted(playlist_tracks_to_dl, key=playlist_tracks.index)):
 
-            track_title = _get_track_local_title(track.title, track.artist)
-            print(f"\t{playlist_tracks.index(track) + 1:>4}| {track_title}")
+            track_title = assemble_track_custom_title(
+                title=track.title,
+                artist=track.artist,
+                track_num=index+1,
+                template=filename_template
+            )
+
+            print(f"\t{index + 1:>4}| {track_title}")
 
             track_id_title_tuples.append((track.id, track_title))
 
@@ -442,8 +458,11 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool = Fa
             mp3_file.initTag()
 
         mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
-
-        mp3_file.tag.save()
+        mp3_file.tag.album = resp_json['metadata']['album']
+        mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
+        
+        # version fixes FRONT_COVER not showing up in windows explorer
+        mp3_file.tag.save(version=(2,3,0))
 
     # prevent API throttling
     sleep(0.1)
@@ -488,12 +507,13 @@ def spotify_downloader(
     output_dir: Path = None,
     create_dir: bool = None,
     skip_duplicate_downloads: bool = None,
-    debug_mode: bool = None
+    debug_mode: bool = None,
+    filename_template: str = r"{artist} - {title}"
 ):
     loop_prompt = True
     
     broken_tracks = []
-    while loop_prompt and (tracks_to_dl := get_tracks_to_download(interactive, urls)):
+    while loop_prompt and (tracks_to_dl := get_tracks_to_download(interactive, filename_template, urls)):
 
         print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
@@ -525,6 +545,13 @@ def parse_args():
             "If a playlist is given, append \"|[TRACK NUMBERS]\" to URL to specify which tracks to download. "
             "Example: 'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, "
             "and fifteenth to the end. If not specified, all tracks are downloaded."
+    )
+    parser.add_argument(
+        '-f',
+        '--filename',
+        type=str,
+        default=r"{artist} - {title}",
+        help="Specify custom filename."
     )
     parser.add_argument(
         '-o',
@@ -608,7 +635,8 @@ def main():
                 urls=urls,
                 create_dir=args.create_dir,
                 skip_duplicate_downloads=args.skip_duplicate_downloads,
-                debug_mode=args.debug
+                debug_mode=args.debug,
+                filename_template=args.filename
             )
 
         else:
@@ -624,7 +652,8 @@ def main():
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
                         skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
-                        debug_mode=args.debug
+                        debug_mode=args.debug,
+                        filename_template=entry.get('filename_template')
                     )
                 )
 
