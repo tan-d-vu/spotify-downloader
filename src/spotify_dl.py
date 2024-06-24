@@ -66,11 +66,27 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     return parser
 
 
-def assemble_track_custom_title(title: str, artist: str = "", track_num: int = 1,
-                                template: str = r"{artist} - {title}") -> str:
-    template = template.replace(r"{track_num}", str(track_num), 1)
-    template = template.replace(r"{title}", title, 1)
-    template = template.replace(r"{artist}", artist, 1)
+def assemble_track_custom_title(
+    title: str,
+    template: str,
+    artist: str = "",
+    track_num: int = 1
+) -> str:
+    if not template:
+        template = r"{artist} - {title}"
+    else:
+        # validate given template
+        allowed_vars = ["title", "artist", "track_num"]
+        for detected_var in re.findall(r"{\w+}", template):
+            if detected_var not in allowed_vars:
+                raise ValueError(
+                    "Variable in filename template of not one of "
+                    f"{', '.join(map(repr, allowed_vars))}. Found: '{detected_var}'"
+                )
+
+    template = template.replace(r"{track_num}", str(track_num)) \
+        .replace(r"{title}", title) \
+        .replace(r"{artist}", artist)
 
     return template
 
