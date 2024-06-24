@@ -19,7 +19,8 @@ optional arguments:
                         'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
   -f TEMPLATE, --filename TEMPLATE
                         Specify custom filename. Use the following tags inside quotation marks: {artist}, {title}, {track_num}
-			Example: --filename "{track_num} - {title}". If not specified, filename = "{artist} - {title}"
+			Example: --filename "{track_num} - {title}". If not specified, filename = "{title} - {artist}". Note that changing this will cause tracks downloaded using a different 
+                        template to not be recognized.
   -o OUTPUT, --output OUTPUT
                         Path to directory where tracks should be downloaded to
   -c, --create-dir      Create the output directory if it does not exist.
