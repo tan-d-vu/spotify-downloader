@@ -73,11 +73,11 @@ def assemble_track_custom_title(
     track_num: int = 1
 ) -> str:
     if not template:
-        template = r"{artist} - {title}"
+        template = r"{title} - {artist}"
     else:
         # validate given template
         allowed_vars = ["title", "artist", "track_num"]
-        for detected_var in re.findall(r"{\w+}", template):
+        for detected_var in re.findall(r"{(\w+)}", template):
             if detected_var not in allowed_vars:
                 raise ValueError(
                     "Variable in filename template of not one of "
@@ -497,7 +497,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool = Fa
         mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
         mp3_file.tag.album = resp_json['metadata']['album']
         mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
-        
+
         # version fixes FRONT_COVER not showing up in windows explorer
         mp3_file.tag.save(version=(2,3,0))
 
@@ -587,7 +587,7 @@ def parse_args():
         '-f',
         '--filename',
         type=str,
-        default=r"{artist} - {title}",
+        default=r"{title} - {artist}",
         help="Specify custom filename."
     )
     parser.add_argument(
