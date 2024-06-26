@@ -387,16 +387,18 @@ def process_input_url(url: str, filename_template: str, interactive: bool) -> li
                     eval(f"album_or_playlist_tracks[{index_or_slice}]")
                 )
 
-        for index, track in enumerate(sorted(tracks_to_dl, key=album_or_playlist_tracks.index)):
+        for track in sorted(tracks_to_dl, key=album_or_playlist_tracks.index):
+
+            track_num = album_or_playlist_tracks.index(track) + 1
 
             track_title = assemble_track_custom_title(
                 title=track.title,
                 artist=track.artist,
-                track_num=index+1,
+                track_num=track_num,
                 template=filename_template
             )
 
-            print(f"\t{index + 1:>4}| {track_title}")
+            print(f"\t{track_num:>4}| {track_title}")
 
             track_id_title_tuples.append((track.id, track_title))
 
