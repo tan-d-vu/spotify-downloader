@@ -53,9 +53,8 @@
    'C:\\Program Files '
    '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-heap-l1-1-0.dll',
    'BINARY'),
-  ('api-ms-win-crt-environment-l1-1-0.dll',
-   'C:\\Program Files '
-   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-environment-l1-1-0.dll',
+  ('VCRUNTIME140.dll',
+   'c:\\users\\mattj\\appdata\\local\\programs\\python\\python38-32\\VCRUNTIME140.dll',
    'BINARY'),
   ('api-ms-win-crt-string-l1-1-0.dll',
    'C:\\Program Files '
@@ -65,12 +64,13 @@
    'C:\\Program Files '
    '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-time-l1-1-0.dll',
    'BINARY'),
-  ('VCRUNTIME140.dll',
-   'c:\\users\\mattj\\appdata\\local\\programs\\python\\python38-32\\VCRUNTIME140.dll',
+  ('api-ms-win-crt-filesystem-l1-1-0.dll',
+   'C:\\Program Files '
+   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-filesystem-l1-1-0.dll',
    'BINARY'),
   ('api-ms-win-crt-locale-l1-1-0.dll',
    'C:\\Program Files '
-   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-locale-l1-1-0.dll',
+   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-crt-string-l1-1-0.dll',
    'BINARY'),
   ('api-ms-win-crt-convert-l1-1-0.dll',
    'C:\\Program Files '
@@ -174,7 +174,7 @@
    'BINARY'),
   ('api-ms-win-core-synch-l1-2-0.dll',
    'C:\\Program Files '
-   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-core-synch-l1-2-0.dll',
+   '(x86)\\Java\\jre1.8.0_261\\bin\\api-ms-win-core-synch-l1-1-0.dll',
    'BINARY'),
   ('api-ms-win-core-rtlsupport-l1-1-0.dll',
    'C:\\Program Files '
