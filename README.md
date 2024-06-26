@@ -15,11 +15,12 @@ usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f TEMPLATE] [-o OUTPUT] [-c] [-
 
 optional arguments:
   -u URLS [URLS ...], --urls URLS [URLS ...]
-                        URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
+                        URL(s) of Sptofy songs, albums, or playlists to download. If an album or playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
                         'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
   -f TEMPLATE, --filename TEMPLATE
                         Specify custom filename. Use the following tags inside quotation marks: {artist}, {title}, {track_num}
-			Example: --filename "{track_num} - {title}". If not specified, filename = "{artist} - {title}"
+			Example: --filename "{track_num} - {title}". If not specified, filename = "{title} - {artist}". Note that changing this will cause tracks downloaded using a different 
+                        template to not be recognized.
   -o OUTPUT, --output OUTPUT
                         Path to directory where tracks should be downloaded to
   -c, --create-dir      Create the output directory if it does not exist.
@@ -31,6 +32,18 @@ optional arguments:
                         Number of times to retry failed downloads.
   --debug               Debug mode.
 ```
+
+### Cfg file
+
+Not to be confused with the "config" file below (bad name, I know. I'll change it at some point), The user can define a file named `.spotify_dl.cfg` in their home directory (in Windows, it's `C:\Users\[Your user]\`) to define settings that will always be used by the downloader.  
+
+```
+[Settings]
+default_download_location="C:\Users\me\Desktop\folder"
+```
+
+Currently, only `default_download_location` is supported
+
 
 ### Config file
 

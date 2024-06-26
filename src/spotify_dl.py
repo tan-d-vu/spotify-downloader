@@ -5,6 +5,7 @@ import signal
 import sys
 import traceback
 from argparse import ArgumentParser
+from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -41,7 +42,7 @@ DOWNLOADER_HEADERS = {
     'TE': 'trailers'
 }
 
-PLAYLIST_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/playlist\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
+MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
 # In interactive mode, user is prompted upon first duplicate encountered
 # Otherwise, set via CLI arg
@@ -58,13 +59,37 @@ class SpotifySong:
     url = f"https://open.spotify.com/track/{id}"
 
 
-def assemble_track_custom_title(title: str, artist: str = "", track_num: int = 1,
-                                template: str = r"{artist} - {title}") -> str:
-    template = template.replace(r"{track_num}", str(track_num), 1)
-    template = template.replace(r"{title}", title, 1)
-    template = template.replace(r"{artist}", artist, 1)
+def parse_cfg(cfg_path: Path) -> ConfigParser:
+    parser = ConfigParser()
+    parser.read(cfg_path)
+
+    return parser
+
+
+def assemble_track_custom_title(
+    title: str,
+    template: str,
+    artist: str = "",
+    track_num: int = 1
+) -> str:
+    if not template:
+        template = r"{title} - {artist}"
+    else:
+        # validate given template
+        allowed_vars = ["title", "artist", "track_num"]
+        for detected_var in re.findall(r"{(\w+)}", template):
+            if detected_var not in allowed_vars:
+                raise ValueError(
+                    "Variable in filename template of not one of "
+                    f"{', '.join(map(repr, allowed_vars))}. Found: '{detected_var}'"
+                )
+
+    template = template.replace(r"{track_num}", str(track_num)) \
+        .replace(r"{title}", title) \
+        .replace(r"{artist}", artist)
 
     return template
+
 
 def _call_downloader_api(
     endpoint: str,
@@ -108,21 +133,21 @@ def get_track_data(track_id: str):
     return resp_json
 
 
-def get_playlist_data(playlist_id: str):
-    metadata_resp = _call_downloader_api(f"/metadata/playlist/{playlist_id}").json()
+def get_multi_track_data(entity_id: str, entity_type: str):
+    metadata_resp = _call_downloader_api(f"/metadata/{entity_type}/{entity_id}").json()
 
     # For paginated response
     track_list = []
 
-    tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}").json()
-    
+    tracks_resp = _call_downloader_api(f"/trackList/{entity_type}/{entity_id}").json()
+
     if not tracks_resp.get('trackList'):
         return {}
 
     track_list.extend(tracks_resp['trackList'])
 
     while next_offset := tracks_resp.get('nextOffset'):
-        tracks_resp = _call_downloader_api(f"/trackList/playlist/{playlist_id}?offset={next_offset}").json()
+        tracks_resp = _call_downloader_api(f"/trackList/{entity_type}/{entity_id}?offset={next_offset}").json()
         track_list.extend(tracks_resp['trackList'])
 
     if not metadata_resp['success']:
@@ -134,7 +159,7 @@ def get_playlist_data(playlist_id: str):
             SpotifySong(
                 title=track['title'],
                 artist=track['artists'],
-                album=track['album'],
+                album=track['album'] if entity_type == "playlist" else metadata_resp['title'],
                 id=track['id']
             )
             for track in track_list
@@ -194,6 +219,10 @@ def get_tracks_to_download(interactive: bool, filename_template, cli_arg_urls: l
 
 def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_dir: bool = None) -> None:
     default_output_dir = Path.home()/'Downloads'
+
+    if (spotify_dl_cfg_path := Path.home()/".spotify_dl.cfg").is_file():
+        spotify_dl_cfg = parse_cfg(spotify_dl_cfg_path)
+        default_output_dir = spotify_dl_cfg.get("Settings", "default_download_location", fallback=default_output_dir)
 
     if interactive:
         output_dir = default_output_dir
@@ -261,12 +290,12 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
     return indexes_or_slices
 
 
-def get_playlist_track_nums_input(playlist_tracks: list) -> list:
+def get_track_nums_input(tracks: list, entity_type: str) -> list:
     track_numbers_inp = None
 
     while not track_numbers_inp:
         track_numbers_inp = input('\n'
-            "    Enter 'show' to list the playlist tracks, the track numbers to download, or '*' to download all:\n"
+            f"    Enter 'show' to list the {entity_type} tracks, the track numbers to download, or '*' to download all:\n"
             "      Example: '1, 4, 15-' to download the first, fourth, and fifteenth to the end\n"
             "  > "
         )
@@ -274,7 +303,7 @@ def get_playlist_track_nums_input(playlist_tracks: list) -> list:
         if 'show' in track_numbers_inp.lower():
             print(
                 '\n    ',
-                '\n    '.join(f"{ind + 1:>4}| {track.title} - {track.artist}" for ind, track in enumerate(playlist_tracks)),
+                '\n    '.join(f"{ind + 1:>4}| {track.title} - {track.artist}" for ind, track in enumerate(tracks)),
                 '\n',
                 sep=''
             )
@@ -304,35 +333,43 @@ def process_input_url(url: str, filename_template: str, interactive: bool) -> li
 
         track_id_title_tuples.append((track_resp_json['metadata']['id'], track_title))
 
-    elif "/playlist/" in url:
-        playlist_id = url.split('/')[-1].split('?')[0].split('|')[0]
+    elif "/playlist/" in url or "/album/" in url:
+        entity_id = url.split('/')[-1].split('?')[0].split('|')[0]
+
+        if "/playlist/" in url:
+            entity_type = "playlist"
+        else:
+            entity_type = "album"
 
         # playlist_name, playlist_creator, playlist_tracks = get_spotify_playlist(playlist_id, token)
-        playlist_resp_json = get_playlist_data(playlist_id)
+        multi_track_resp_json = get_multi_track_data(entity_id, entity_type)
 
-        if not playlist_resp_json:
-            print(f"\t[!] Playlist not found{f' at {url}' if not interactive else ''} or it is set to Private.")
+        if not multi_track_resp_json:
+            print(
+                f"\t[!] {entity_type.capitalize()} not found{f' at {url}' if not interactive else ''}"
+                f"{' or it is set to Private' if entity_type == 'playlist' else ''}."
+            )
             return []
 
         # print(f"\t{playlist_name} - {playlist_creator} ({len(playlist_tracks)} tracks)")
-        print(f"\t{playlist_resp_json['title']} - {playlist_resp_json['artists']} ({len(playlist_resp_json['trackList'])} tracks)")
+        print(f"\t{multi_track_resp_json['title']} - {multi_track_resp_json['artists']} ({len(multi_track_resp_json['trackList'])} tracks)")
 
-        playlist_tracks = playlist_resp_json['trackList']
+        album_or_playlist_tracks = multi_track_resp_json['trackList']
 
         if interactive:
-            track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+            track_numbers_inp = get_track_nums_input(album_or_playlist_tracks, entity_type)
 
-            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))):
-                track_numbers_inp = get_playlist_track_nums_input(playlist_tracks)
+            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))):
+                track_numbers_inp = get_track_nums_input(album_or_playlist_tracks)
 
         else:
-            if specified_track_nums := PLAYLIST_INPUT_URL_TRACK_NUMS_RE.match(url):
+            if specified_track_nums := MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE.match(url):
                 track_numbers_inp = specified_track_nums.group('track_nums')
             else:
-                # Default to downloading whole playlist
+                # Default to downloading whole playlist/album
                 track_numbers_inp = '*'
 
-            indexes_or_slices = track_num_inp_to_ind(track_numbers_inp, list_len=len(playlist_tracks))
+            indexes_or_slices = track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))
 
             if not indexes_or_slices:
                 raise ValueError(
@@ -340,26 +377,28 @@ def process_input_url(url: str, filename_template: str, interactive: bool) -> li
                 )
 
         # Process input given for which tracks to download
-        playlist_tracks_to_dl = []
+        tracks_to_dl = []
         for index_or_slice in indexes_or_slices:
 
             if index_or_slice.isnumeric():
-                playlist_tracks_to_dl.append(playlist_tracks[int(index_or_slice)])
+                tracks_to_dl.append(album_or_playlist_tracks[int(index_or_slice)])
             else:
-                playlist_tracks_to_dl.extend(
-                    eval(f"playlist_tracks[{index_or_slice}]")
+                tracks_to_dl.extend(
+                    eval(f"album_or_playlist_tracks[{index_or_slice}]")
                 )
 
-        for index, track in enumerate(sorted(playlist_tracks_to_dl, key=playlist_tracks.index)):
+        for track in sorted(tracks_to_dl, key=album_or_playlist_tracks.index):
+
+            track_num = album_or_playlist_tracks.index(track) + 1
 
             track_title = assemble_track_custom_title(
                 title=track.title,
                 artist=track.artist,
-                track_num=index+1,
+                track_num=track_num,
                 template=filename_template
             )
 
-            print(f"\t{index + 1:>4}| {track_title}")
+            print(f"\t{track_num:>4}| {track_title}")
 
             track_id_title_tuples.append((track.id, track_title))
 
@@ -460,7 +499,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool = Fa
         mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
         mp3_file.tag.album = resp_json['metadata']['album']
         mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
-        
+
         # version fixes FRONT_COVER not showing up in windows explorer
         mp3_file.tag.save(version=(2,3,0))
 
@@ -550,7 +589,7 @@ def parse_args():
         '-f',
         '--filename',
         type=str,
-        default=r"{artist} - {title}",
+        default=r"{title} - {artist}",
         help="Specify custom filename."
     )
     parser.add_argument(
