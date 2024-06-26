@@ -1,3 +1,4 @@
 spotify_dl:
 	echo "\n*Building with PyInstaller*\n"
-	pyinstaller spotify_dl.py
+	pyinstaller src/spotify_dl.py --onefile
+	echo "\nDone"
