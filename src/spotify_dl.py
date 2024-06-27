@@ -13,6 +13,7 @@ from time import sleep
 
 # Want to figure out how to do this without a third party module
 import eyed3
+from eyed3.id3 import ID3_V2_3
 from eyed3.id3.frames import ImageFrame
 
 # Suppress warnings about CRC fail for cover art
@@ -501,7 +502,7 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool = Fa
         mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
 
         # version fixes FRONT_COVER not showing up in windows explorer
-        mp3_file.tag.save(version=(2,3,0))
+        mp3_file.tag.save(version=ID3_V2_3)
 
     # prevent API throttling
     sleep(0.1)
