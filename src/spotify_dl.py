@@ -548,7 +548,7 @@ def spotify_downloader(
     create_dir: bool = None,
     skip_duplicate_downloads: bool = None,
     debug_mode: bool = None,
-    filename_template: str = r"{artist} - {title}"
+    filename_template: str = r"{title} - {artist}"
 ):
     loop_prompt = True
     
