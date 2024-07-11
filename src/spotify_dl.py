@@ -501,6 +501,8 @@ def download_track(track_id, track_title, dest_dir: Path, interactive: bool = Fa
         mp3_file.tag.album = resp_json['metadata']['album']
         mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
 
+        # default version lets album art show up in Serato
+        #mp3_file.tag.save()
         # version fixes FRONT_COVER not showing up in windows explorer
         mp3_file.tag.save(version=ID3_V2_3)
 
@@ -688,7 +690,7 @@ def main():
                 broken_tracks.extend(
                     spotify_downloader(
                         interactive=interactive,
-                        output_dir=Path(entry.get('output_dir')),
+                        output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
                         skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
