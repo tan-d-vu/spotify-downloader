@@ -226,7 +226,7 @@ def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_d
         default_output_dir = spotify_dl_cfg.get("Settings", "default_download_location", fallback=default_output_dir)
 
     if interactive:
-        output_dir = default_output_dir
+        output_dir = Path(default_output_dir)
         print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
 
         if other_dir := input("(New download location?) "):
