@@ -1,6 +1,6 @@
 # spotify-downloader
 
-Spotify song downloader using API created by spotifydown.com
+Spotify song downloader using API created by [lucida.to](https://lucida.to/)
 
 The script `src/spotify_dl.py` can be run in interactive mode or CLI mode.
 
