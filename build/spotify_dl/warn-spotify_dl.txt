@@ -32,7 +32,6 @@ missing module named urllib.quote - imported by urllib (conditional), requests.c
 excluded module named _frozen_importlib - imported by importlib (optional), importlib.abc (optional), zipimport (top-level)
 missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional), zipimport (top-level)
 missing module named _posixsubprocess - imported by subprocess (optional)
-missing module named typing_extensions - imported by packaging.metadata (conditional, optional)
 missing module named _manylinux - imported by packaging._manylinux (delayed, optional)
 missing module named StringIO - imported by urllib3.packages.six (conditional), requests.compat (conditional), pkg_resources._vendor.six (conditional)
 missing module named _uuid - imported by uuid (optional)
