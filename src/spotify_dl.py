@@ -435,10 +435,8 @@ def track_num_inp_to_ind(given_inp: str, list_len: int) -> list:
 
     for item in no_ws.split(','):
 
-        # TODO: allow negative to get last n songs?
-
         if item.isnumeric(): # ensure the user inputs a valid number in the playlist range
-            if not (1 <= int(item) <= list_len):
+            if not 1 <= int(item) <= list_len:
                 print(f"Track number {item} does not exist.  Valid numbers are 1 - {list_len}")
                 continue
             # Subtract one for indexing
@@ -669,7 +667,7 @@ def download_track(track_id, out_file_title, dest_dir: Path, interactive: bool =
         cover_resp = requests.get(cover_art_url,headers=hdrs)
 
         mp3_file = eyed3.load(dest_dir/track_filename)
-        if (mp3_file.tag == None):
+        if not mp3_file.tag:
             mp3_file.initTag()
 
         mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
@@ -728,7 +726,7 @@ def spotify_downloader(
     filename_template: str = r"{title} - {artist}"
 ):
     loop_prompt = True
-    
+
     broken_tracks = []
     while loop_prompt and (tracks_to_dl := get_tracks_to_download(interactive, filename_template, urls)):
 
@@ -1219,7 +1217,7 @@ def main():
         if num_retries:
             print("Re-attempting to download tracks")
             for i in range(num_retries):
-                print(f"Attempt {i + 1} of {num_retries}") 
+                print(f"Attempt {i + 1} of {num_retries}")
                 for track, out_file_title, output_dir in broken_tracks.copy():
                     try:
                         #download_track(track, out_file_title, output_dir)
