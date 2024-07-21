@@ -347,10 +347,10 @@ def get_spotify_album(album_id: str, token: str) -> SpotifyAlbum:
 
     tracks_list = [
         SpotifySong(
-            title=track['track']['name'],
-            artist=', '.join(artist['name'] for artist in track['track']['artists']),
-            album=track['track']['album']['name'],
-            id=track['track']['id'],
+            title=track['name'],
+            artist=', '.join(artist['name'] for artist in track['artists']),
+            album=album['name'],
+            id=track['id'],
             cover_art_url=cover_art_url,
             release_date=release_date
         )
