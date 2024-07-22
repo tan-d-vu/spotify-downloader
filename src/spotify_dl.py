@@ -352,9 +352,33 @@ def assemble_track_custom_title(
 
 
 def validate_config_file(config_file: Path) -> list:
-    # TODO: validate entries
+    allowed_args = {
+        'url': str,
+        'output_dir': str,
+        'create_dir': bool,
+        'skip_duplicate_downloads': bool,
+        'filename_template': str,
+        'file_type': str
+    }
+
     with open(config_file) as config_fp:
         loaded_config = json.load(config_fp)
+
+    if not isinstance(loaded_config, list):
+        raise RuntimeError("Config file must be a list")
+
+    for e_idx, entry in enumerate(loaded_config, start=1):
+        for key in entry:
+            if key not in allowed_args:
+                raise ValueError(
+                    f"Key '{key}' in entry {e_idx} is not valid.  "
+                    f"Allowed keys are: {', '.join(allowed_args)}"
+                )
+            elif not isinstance(entry[key], allowed_args[key]):
+                raise ValueError(
+                    f"Key '{key}' in entry {e_idx} is the wrong type.  "
+                    f"Argument for '{key}' must be of type '{allowed_args[key]}'"
+                )
 
     return loaded_config
 
