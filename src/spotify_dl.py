@@ -15,9 +15,18 @@ import requests
 from eyed3.id3 import ID3_V2_3
 from eyed3.id3.frames import ImageFrame
 
-# Suppress warnings about CRC fail for cover art
+
+eyed3_warnings = []
+def _suppress_warning(*args, **kwargs):
+    eyed3_warnings.append((args, kwargs))
+    logging.debug(*args, **kwargs)
+
+
+# Suppress warnings from eyeD3
 import logging
-logging.getLogger('eyed3.mp3.headers').warning = logging.debug
+logging.getLogger('eyed3.mp3.headers').warning = _suppress_warning
+logging.getLogger('eyed3.id3.tag').warning = _suppress_warning
+logging.getLogger('eyed3.core').warning = _suppress_warning
 
 
 # Cheeky Ctrl+C handler
@@ -938,8 +947,6 @@ def download_track_lucida(
     with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
         track_mp3_fp.write(audio_dl_resp.content)
 
-    # TODO: suppress eyeD3 invalid date warnings
-
     mp3_file = eyed3.load(dest_dir/track_filename)
     if not mp3_file.tag:
         mp3_file.initTag()
@@ -1000,7 +1007,11 @@ def download_all_tracks_lucida(
 
             if debug_mode:
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
-                    debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
+                    debug_fp.write(
+                        f"{datetime.now()} | {exc}"
+                        f"{f'eyeD3 parse errors: {eyed3_warnings}' if eyed3_warnings else ''} "
+                        f":: {traceback.format_exc()}\n\n"
+                    )
 
     print("\nAll done.\n")
     if broken_tracks:
