@@ -89,12 +89,14 @@ class SpotifySong:
         artist: str,
         album: str,
         id: str,
-        cover_art_url: str,
-        release_date: str
+        track_number: int = 0,
+        cover_art_url: str = "",
+        release_date: str = ""
     ):
         self.title = title
         self.artist = artist
         self.album = album
+        self.track_number = track_number
         self.id = id
         self.cover_art_url = cover_art_url
         self.release_date = release_date
@@ -165,6 +167,7 @@ def get_spotify_track(track_id: str, token: str) -> SpotifySong:
         artist=', '.join(artist['name'] for artist in track['artists']),
         album=track['album']['name'],
         id=track['id'],
+        track_number=track['track_number'],
         cover_art_url=track['album']['images'][0]['url'] if len(track['album'].get('images', [])) else None,
         release_date=track['album']['release_date']
     )
@@ -191,6 +194,7 @@ def get_spotify_album(album_id: str, token: str) -> SpotifyAlbum:
             artist=', '.join(artist['name'] for artist in track['artists']),
             album=album['name'],
             id=track['id'],
+            track_number=track['track_number'],
             cover_art_url=cover_art_url,
             release_date=release_date
         )
@@ -221,14 +225,15 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
 
     tracks_list = [
         SpotifySong(
-            title=track['track']['name'],
-            artist=', '.join(artist['name'] for artist in track['track']['artists']),
-            album=track['track']['album']['name'],
-            id=track['track']['id'],
-            cover_art_url=track['track']['album']['images'][0]['url'] if len(track['track']['album'].get('images', [])) else None,
-            release_date=track['track']['album']['release_date']
+            title=track_data['track']['name'],
+            artist=', '.join(artist['name'] for artist in track_data['track']['artists']),
+            album=track_data['track']['album']['name'],
+            id=track_data['track']['id'],
+            track_number=track_data['track']['track_number'],
+            cover_art_url=track_data['track']['album']['images'][0]['url'] if len(track_data['track']['album'].get('images', [])) else None,
+            release_date=track_data['track']['album']['release_date']
         )
-        for track in playlist_tracks['items']
+        for track_data in playlist_tracks['items']
     ]
 
     while next_chunk_url := playlist_tracks.get('next'):
@@ -241,14 +246,15 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
 
         tracks_list.extend(
             SpotifySong(
-                title=track['track']['name'],
-                artist=', '.join(artist['name'] for artist in track['track']['artists']),
-                album=track['track']['album']['name'],
-                id=track['track']['id'],
-                cover_art_url=track['track']['album']['images'][0]['url'] if len(track['track']['album'].get('images', [])) else None,
-                release_date=track['track']['album']['release_date']
+                title=track_data['track']['name'],
+                artist=', '.join(artist['name'] for artist in track_data['track']['artists']),
+                album=track_data['track']['album']['name'],
+                id=track_data['track']['id'],
+                track_number=track_data['track']['track_number'],
+                cover_art_url=track_data['track']['album']['images'][0]['url'] if len(track_data['track']['album'].get('images', [])) else None,
+                release_date=track_data['track']['album']['release_date']
             )
-            for track in playlist_tracks['items']
+            for track_data in playlist_tracks['items']
         )
 
     return SpotifyPlaylist(
@@ -468,6 +474,7 @@ def get_multi_track_data(entity_id: str, entity_type: str):
                 artist=track['artists'],
                 album=track['album'] if entity_type == "playlist" else metadata_resp['title'],
                 id=track['id'],
+                track_number=0,
                 cover_art_url=None,
                 release_date=None
             )
@@ -1027,6 +1034,9 @@ def download_track_lucida(
 
     if track.release_date:
         mp3_file.tag.release_date = track.release_date
+
+    if track.track_number:
+        mp3_file.tag.track_num = track.track_number
 
     # default version lets album art show up in Serato
     mp3_file.tag.save()
