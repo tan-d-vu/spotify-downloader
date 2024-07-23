@@ -825,7 +825,9 @@ def download_all_tracks(
     broken_tracks = []
 
     for idx, (track_obj, out_file_title) in enumerate(tracks, start=1):
+
         print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
+
         try:
             download_track(
                 track=track_obj,
@@ -836,14 +838,9 @@ def download_all_tracks(
                 interactive=interactive,
                 skip_duplicates=skip_duplicate_downloads
             )
+
         except Exception as exc:
             broken_tracks.append((track_obj, out_file_title, output_dir))
-
-
-
-            #print("!!!", exc)
-
-
 
             if debug_mode:
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
