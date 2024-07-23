@@ -32,9 +32,10 @@ logging.getLogger('eyed3.core').warning = _suppress_warning
 # Cheeky Ctrl+C handler
 signal.signal(signal.SIGINT, lambda sig, frame : print('\n\nInterrupt received. Exiting.\n') or sys.exit(0))
 
-DOWNLOADER_URL = "https://api.spotifydown.com"
+DOWNLOADER_SPOTIFYDOWN = "spotifydown"
+DOWNLOADER_SPOTIFYDOWN_URL = "https://api.spotifydown.com"
 # Clean browser heads for API
-DOWNLOADER_HEADERS = {
+DOWNLOADER_SPOTIFYDOWN_HEADERS = {
     'Host': 'api.spotifydown.com',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
     'Accept': '*/*',
@@ -51,6 +52,7 @@ DOWNLOADER_HEADERS = {
     'TE': 'trailers'
 }
 
+DOWNLOADER_LUCIDA = "lucida"
 DOWNLOADER_LUCIDA_URL = "https://lucida.to"
 DOWNLOADER_LUCIDA_FILE_FORMATS = ['mp3-320', 'mp3-256', 'mp3-128', 'ogg-320', 'ogg-256', 'ogg-128', 'original']
 DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT = "mp3-320"
@@ -68,6 +70,8 @@ DOWNLOADER_LUCIDA_HEADERS = {
     'Sec-Fetch-Site': 'same-origin',
     'Sec-GPC': '1'
 }
+
+DOWNLOADER_OPTIONS = [DOWNLOADER_LUCIDA, DOWNLOADER_SPOTIFYDOWN]
 
 MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
@@ -290,6 +294,38 @@ def _validate_filename_template(given_str: str):
             )
 
 
+def validate_config_file(config_file: Path) -> list:
+    allowed_args = {
+        'url': str,
+        'output_dir': str,
+        'create_dir': bool,
+        'skip_duplicate_downloads': bool,
+        'filename_template': str,
+        'file_type': str
+    }
+
+    with open(config_file) as config_fp:
+        loaded_config = json.load(config_fp)
+
+    if not isinstance(loaded_config, list):
+        raise RuntimeError("Config file must be a list")
+
+    for e_idx, entry in enumerate(loaded_config, start=1):
+        for key in entry:
+            if key not in allowed_args:
+                raise ValueError(
+                    f"Key '{key}' in entry {e_idx} is not valid.  "
+                    f"Allowed keys are: {', '.join(allowed_args)}"
+                )
+            elif not isinstance(entry[key], allowed_args[key]):
+                raise ValueError(
+                    f"Key '{key}' in entry {e_idx} is the wrong type.  "
+                    f"Argument for '{key}' must be of type '{allowed_args[key]}'"
+                )
+
+    return loaded_config
+
+
 def get_filename_template_from_user() -> str:
     print(
         "If you would like to use a different naming pattern for the file, enter it now.\n"
@@ -311,6 +347,27 @@ def get_filename_template_from_user() -> str:
             print(f"'{filename_resp}' is invalid - {exc}")
         else:
             return filename_resp
+
+
+def get_downloader_from_user() -> str:
+    print(
+        "If you would like to use a different naming pattern for the file, enter it now.\n"
+        f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
+        r"Must be contained in curly braces {}"
+        f"\n\nDefault: \"{DOWNLOADER_LUCIDA}\"\n\n"
+    )
+
+    # loop until we get something we can use
+    while 1:
+        downloader_resp = input(
+            f"Select {' or '.join(map(repr, DOWNLOADER_OPTIONS))} or press [ENTER] to use default: "
+        )
+        if not downloader_resp:
+            return DOWNLOADER_LUCIDA
+        if (downloader_resp_lower := downloader_resp.lower()) not in DOWNLOADER_OPTIONS:
+            print(f"'{downloader_resp_lower}' is not one of {', '.join(DOWNLOADER_OPTIONS)}")
+        else:
+            return downloader_resp_lower
 
 
 def get_file_type_from_user() -> str:
@@ -349,38 +406,6 @@ def assemble_track_custom_title(
         .replace(r"{artist}", artist)
 
     return template
-
-
-def validate_config_file(config_file: Path) -> list:
-    allowed_args = {
-        'url': str,
-        'output_dir': str,
-        'create_dir': bool,
-        'skip_duplicate_downloads': bool,
-        'filename_template': str,
-        'file_type': str
-    }
-
-    with open(config_file) as config_fp:
-        loaded_config = json.load(config_fp)
-
-    if not isinstance(loaded_config, list):
-        raise RuntimeError("Config file must be a list")
-
-    for e_idx, entry in enumerate(loaded_config, start=1):
-        for key in entry:
-            if key not in allowed_args:
-                raise ValueError(
-                    f"Key '{key}' in entry {e_idx} is not valid.  "
-                    f"Allowed keys are: {', '.join(allowed_args)}"
-                )
-            elif not isinstance(entry[key], allowed_args[key]):
-                raise ValueError(
-                    f"Key '{key}' in entry {e_idx} is the wrong type.  "
-                    f"Argument for '{key}' must be of type '{allowed_args[key]}'"
-                )
-
-    return loaded_config
 
 
 def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_dir: bool = None) -> None:
@@ -430,17 +455,47 @@ def _call_spotifydown_api(
     }
 
     if not headers:
-        headers=DOWNLOADER_HEADERS
+        headers=DOWNLOADER_SPOTIFYDOWN_HEADERS
 
     if method not in _map:
         raise ValueError
 
     try:
-        resp = _map[method](DOWNLOADER_URL + endpoint, headers=headers, **kwargs)
+        resp = _map[method](DOWNLOADER_SPOTIFYDOWN_URL + endpoint, headers=headers, **kwargs)
     except Exception as exc:
         raise RuntimeError("ERROR: ", exc)
 
     return resp
+
+
+def _download_track_spotifydown(track: SpotifySong):
+    resp_json = get_track_data(track.id)
+
+    # Clean browser heads for API
+    hdrs = {
+        #'Host': 'cdn[#].tik.live', # <-- set this below
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip',
+        'Referer': 'https://spotifydown.com/',
+        'Origin': 'https://spotifydown.com',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-GPC': '1'
+    }
+
+    if 'link' not in resp_json or 'metadata' not in resp_json:
+        print("\tDownload failed.")
+        raise RuntimeError(
+            f"Bad response for track '{track.artist} - {track.title}' ({track.id}): {resp_json}"
+        )
+
+    hdrs['Host'] = resp_json['link'].split('/')[2]
+    return requests.get(resp_json['link'], headers=hdrs)
 
 
 def _download_track_lucida(track_url: str, file_format=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT):
@@ -451,6 +506,7 @@ def _download_track_lucida(track_url: str, file_format=DOWNLOADER_LUCIDA_FILE_FO
         raise ValueError(f"File format '{file_format}' is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}")
 
     sleep(5)
+
     # downscale args: mp3-320, mp3-256, mp3-128, ogg-320, ogg-256, ogg-128
     return requests.get(
         f"https://hund.lucida.to/api/fetch/stream?url={track_url}"
@@ -470,65 +526,33 @@ def get_track_data(track_id: str):
     return resp_json
 
 
-def get_multi_track_data(entity_id: str, entity_type: str):
-    metadata_resp = _call_spotifydown_api(f"/metadata/{entity_type}/{entity_id}").json()
-
-    # For paginated response
-    track_list = []
-
-    tracks_resp = _call_spotifydown_api(f"/trackList/{entity_type}/{entity_id}").json()
-
-    if not tracks_resp.get('trackList'):
-        return {}
-
-    track_list.extend(tracks_resp['trackList'])
-
-    while next_offset := tracks_resp.get('nextOffset'):
-        tracks_resp = _call_spotifydown_api(f"/trackList/{entity_type}/{entity_id}?offset={next_offset}").json()
-        track_list.extend(tracks_resp['trackList'])
-
-    if not metadata_resp['success']:
-        return {}
-
-    return {
-        **metadata_resp,
-        'trackList': [
-            SpotifySong(
-                title=track['title'],
-                artist=track['artists'],
-                album=track['album'] if entity_type == "playlist" else metadata_resp['title'],
-                id=track['id'],
-                track_number=0,
-                cover_art_url=None,
-                release_date=None
-            )
-            for track in track_list
-        ]
-    }
-
-
-def get_tracks_to_download(interactive: bool, filename_template, cli_arg_urls: list = None) -> list:
+def get_tracks_to_download(
+    interactive: bool,
+    filename_template: str,
+    spotify_token: str,
+    cli_arg_urls: list = None
+) -> list:
     tracks_to_dl = []
 
     if interactive:
         print("Enter URL for Spotify track to download, a playlist to download from, or press [ENTER] with an empty line when done.")
 
         while url := input("> "):
-            track_id_title_tuple_list = process_input_url(url, filename_template, interactive)
+            track_obj_title_tuple_list = process_input_url(url, filename_template, interactive, spotify_token)
 
-            if not track_id_title_tuple_list:
+            if not track_obj_title_tuple_list:
                 continue
 
-            tracks_to_dl.extend(track_id_title_tuple_list)
+            tracks_to_dl.extend(track_obj_title_tuple_list)
 
     else:
         for url in cli_arg_urls:
-            track_id_title_tuple_list = process_input_url(url, filename_template, interactive)
+            track_obj_title_tuple_list = process_input_url(url, filename_template, interactive, spotify_token)
 
-            if not track_id_title_tuple_list:
+            if not track_obj_title_tuple_list:
                 continue
 
-            tracks_to_dl.extend(track_id_title_tuple_list)
+            tracks_to_dl.extend(track_obj_title_tuple_list)
 
     return tracks_to_dl
 
@@ -591,272 +615,7 @@ def get_track_nums_input(tracks: list, entity_type: str) -> list:
     return track_numbers_inp
 
 
-def process_input_url(url: str, filename_template: str, interactive: bool) -> list:
-    track_id_title_tuples = []
-
-    if "/track/" in url:
-        track_resp_json = get_track_data(track_id=url.split('/')[-1].split('?')[0])
-
-        if not track_resp_json:
-            print(f"\t[!] Song not found{f' at {url}' if not interactive else ''}.")
-            return []
-
-        out_file_title = assemble_track_custom_title(
-            title=track_resp_json['metadata']['title'],
-            artist=track_resp_json['metadata']['artists'],
-            track_num=0,
-            template=filename_template
-        )
-
-        print(f"\t{out_file_title}")
-
-        track_id_title_tuples.append((track_resp_json['metadata']['id'], out_file_title))
-
-    elif "/playlist/" in url or "/album/" in url:
-        entity_id = url.split('/')[-1].split('?')[0].split('|')[0]
-
-        if "/playlist/" in url:
-            entity_type = "playlist"
-        else:
-            entity_type = "album"
-
-        # playlist_name, playlist_creator, playlist_tracks = get_spotify_playlist(playlist_id, token)
-        multi_track_resp_json = get_multi_track_data(entity_id, entity_type)
-
-        if not multi_track_resp_json:
-            print(
-                f"\t[!] {entity_type.capitalize()} not found{f' at {url}' if not interactive else ''}"
-                f"{' or it is set to Private' if entity_type == 'playlist' else ''}."
-            )
-            return []
-
-        # print(f"\t{playlist_name} - {playlist_creator} ({len(playlist_tracks)} tracks)")
-        print(f"\t{multi_track_resp_json['title']} - {multi_track_resp_json['artists']} ({len(multi_track_resp_json['trackList'])} tracks)")
-
-        album_or_playlist_tracks = multi_track_resp_json['trackList']
-
-        if interactive:
-            track_numbers_inp = get_track_nums_input(album_or_playlist_tracks, entity_type)
-
-            while not (indexes_or_slices := track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))):
-                track_numbers_inp = get_track_nums_input(album_or_playlist_tracks, entity_type)
-
-        else:
-            if specified_track_nums := MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE.match(url):
-                track_numbers_inp = specified_track_nums.group('track_nums')
-            else:
-                # Default to downloading whole playlist/album
-                track_numbers_inp = '*'
-
-            indexes_or_slices = track_num_inp_to_ind(track_numbers_inp, list_len=len(album_or_playlist_tracks))
-
-            if not indexes_or_slices:
-                raise ValueError(
-                    f"Invalid track number indentifer(s) given: '{specified_track_nums}'"
-                )
-
-        # Process input given for which tracks to download
-        tracks_to_dl = []
-        for index_or_slice in indexes_or_slices:
-
-            if index_or_slice.isnumeric():
-                tracks_to_dl.append(album_or_playlist_tracks[int(index_or_slice)])
-            else:
-                tracks_to_dl.extend(
-                    eval(f"album_or_playlist_tracks[{index_or_slice}]")
-                )
-
-        for track in sorted(tracks_to_dl, key=album_or_playlist_tracks.index):
-
-            track_num = album_or_playlist_tracks.index(track) + 1
-
-            out_file_title = assemble_track_custom_title(
-                title=track.title,
-                artist=track.artist,
-                track_num=track_num,
-                template=filename_template
-            )
-
-            print(f"\t{track_num:>4}| {out_file_title}")
-
-            track_id_title_tuples.append((track.id, out_file_title))
-
-    else:
-        print(f"\t[!] Invalid URL{f' -- {url}' if not interactive else ''}.")
-        return []
-
-    return track_id_title_tuples
-
-
-def download_track(track_id, out_file_title, dest_dir: Path, interactive: bool = False, skip_duplicates: bool = False):
-    track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title}.mp3")
-
-    global skip_duplicate_downloads
-    global skip_duplicate_downloads_prompted
-
-    if (dest_dir/track_filename).exists():
-        if skip_duplicates or skip_duplicate_downloads:
-            print(f"Skipping download for '{out_file_title}'...")
-            return
-
-        if interactive and not skip_duplicate_downloads_prompted:
-            dup_song_inp = input(
-                f"The song '{out_file_title}' was already downloaded to {dest_dir.absolute()}.\n"
-                "  Would you like to download it again? [y/N]: "
-            )
-
-            if skip_this_dl := (not dup_song_inp or dup_song_inp.lower().startswith('n')):
-                print("\nSkipping download.\n")
-                # Prompt user if we haven't yet before skipping this one
-
-            if not skip_duplicate_downloads_prompted:
-                dup_all_inp = input(
-                    "  Would you like to re-download songs that have already been downloaded? [y/N]: "
-                )
-
-                if not dup_all_inp or dup_all_inp.lower().startswith('n'):
-                    skip_duplicate_downloads = True
-                    print("\nSkipping duplicate downloads.\n")
-                else:
-                    skip_duplicate_downloads = False
-                    print("\nRe-downloading all tracks.\n")
-
-                skip_duplicate_downloads_prompted = True
-
-            if skip_this_dl:
-                return
-
-    print(f"Downloading: '{out_file_title}'...")
-
-    # Grab a fresh download link since the one was got may have expired
-    resp_json = get_track_data(track_id)
-
-    # Clean browser heads for API
-    hdrs = {
-        #'Host': 'cdn[#].tik.live', # <-- set this below
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip',
-        'Referer': 'https://spotifydown.com/',
-        'Origin': 'https://spotifydown.com',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-GPC': '1'
-    }
-
-    if 'link' not in resp_json or 'metadata' not in resp_json:
-        print("\tDownload failed.")
-        raise RuntimeError(
-            f"Bad response for track '{out_file_title}' ({track_id}): {resp_json}"
-        )
-
-    # For audio
-    hdrs['Host'] = resp_json['link'].split('/')[2]
-    audio_dl_resp = requests.get(resp_json['link'], headers=hdrs)
-
-    if not audio_dl_resp.ok:
-        raise RuntimeError(
-            f"Bad download response for track '{out_file_title}' ({track_id}): {audio_dl_resp.content}"
-        )
-
-    with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
-        track_mp3_fp.write(audio_dl_resp.content)
-
-    # For cover art
-    if cover_art_url := resp_json['metadata'].get('cover'):
-        hdrs['Host'] = cover_art_url.split('/')[2]
-        cover_resp = requests.get(cover_art_url,headers=hdrs)
-
-        mp3_file = eyed3.load(dest_dir/track_filename)
-        if not mp3_file.tag:
-            mp3_file.initTag()
-
-        mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
-        mp3_file.tag.album = resp_json['metadata']['album']
-        mp3_file.tag.recording_date = resp_json['metadata']['releaseDate']
-
-        # default version lets album art show up in Serato
-        mp3_file.tag.save()
-        # version fixes FRONT_COVER not showing up in windows explorer
-        #mp3_file.tag.save(version=ID3_V2_3)
-
-    # prevent API throttling
-    sleep(0.1)
-
-    print("\tDone.")
-
-
-def download_all_tracks(
-    tracks_to_dl: list,
-    output_dir: Path,
-    interactive: bool,
-    skip_duplicate_downloads: bool,
-    debug_mode: bool = False
-) -> list:
-    print(f"\nDownloading to '{output_dir.absolute()}'.\n")
-
-    print('-' * 32)
-
-    tracks = list(dict.fromkeys(tracks_to_dl))
-    broken_tracks = []
-
-    for idx, (track_id, track_title) in enumerate(tracks, start=1):
-        print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
-        try:
-            download_track(track_id, track_title, output_dir, interactive, skip_duplicate_downloads)
-        except Exception as exc:
-            broken_tracks.append((track_id, track_title, output_dir))
-            if debug_mode:
-                with open('.spotify_dl_err.txt', 'a') as debug_fp:
-                    debug_fp.write(f"{datetime.now()} | {exc} :: {traceback.format_exc()}\n\n")
-
-    print("\nAll done.\n")
-    if broken_tracks:
-        print("[!] Some tracks failed to download.")
-
-    return broken_tracks
-
-
-def spotify_downloader(
-    interactive: bool,
-    urls: list = None,
-    output_dir: Path = None,
-    create_dir: bool = None,
-    skip_duplicate_downloads: bool = None,
-    debug_mode: bool = None,
-    filename_template: str = FILENAME_TEMPLATE_DEFAULT
-):
-    loop_prompt = True
-
-    broken_tracks = []
-    while loop_prompt and (tracks_to_dl := get_tracks_to_download(interactive, filename_template, urls)):
-
-        print(f"\nTracks to download: {len(tracks_to_dl)}\n")
-
-        output_dir = set_output_dir(interactive, output_dir, create_dir)
-
-        broken_tracks.extend(
-            download_all_tracks(
-                tracks_to_dl,
-                output_dir,
-                interactive,
-                skip_duplicate_downloads,
-                debug_mode
-            )
-        )
-        if not interactive:
-            loop_prompt = False
-
-    return broken_tracks
-
-
-########################################################## LUCIDA ##############################################################
-
-def process_input_url_lucida(url: str, filename_template: str, interactive: bool, spotify_token: str) -> list:
+def process_input_url(url: str, filename_template: str, interactive: bool, spotify_token: str) -> list:
     track_obj_title_tuples = []
 
     if "/track/" in url:
@@ -894,7 +653,6 @@ def process_input_url_lucida(url: str, filename_template: str, interactive: bool
             )
             return []
 
-        # print(f"\t{playlist_name} - {playlist_creator} ({len(playlist_tracks)} tracks)")
         if isinstance(multi_track_obj, SpotifyAlbum):
             print(f"\t{multi_track_obj.title} - {multi_track_obj.artist} ({len(multi_track_obj.tracks)} tracks)")
         else:
@@ -955,47 +713,21 @@ def process_input_url_lucida(url: str, filename_template: str, interactive: bool
     return track_obj_title_tuples
 
 
-def get_tracks_to_download_lucida(
-    interactive: bool,
-    spotify_token: str,
-    filename_template: str,
-    cli_arg_urls: list = None
-) -> list:
-    tracks_to_dl = []
-
-    if interactive:
-        print("Enter URL for Spotify track to download, a playlist to download from, or press [ENTER] with an empty line when done.")
-
-        while url := input("> "):
-            track_obj_title_tuple_list = process_input_url_lucida(url, filename_template, interactive, spotify_token)
-
-            if not track_obj_title_tuple_list:
-                continue
-
-            tracks_to_dl.extend(track_obj_title_tuple_list)
-
-    else:
-        for url in cli_arg_urls:
-            track_obj_title_tuple_list = process_input_url_lucida(url, filename_template, interactive, spotify_token)
-
-            if not track_obj_title_tuple_list:
-                continue
-
-            tracks_to_dl.extend(track_obj_title_tuple_list)
-
-    return tracks_to_dl
-
-
-def download_track_lucida(
+def download_track(
     track: SpotifySong,
     out_file_title: str,
     dest_dir: Path,
+    downloader: str = DOWNLOADER_LUCIDA,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
     skip_duplicates: bool = False
 ):
-    # This might come back to bite me in the ass. need to infer file type
-    file_ext = file_type.split('-')[0] if file_type != 'original' else "ogg"
+    if downloader == DOWNLOADER_LUCIDA:
+        # This might come back to bite me in the ass. need to infer file type
+        file_ext = file_type.split('-')[0] if file_type != 'original' else "ogg"
+    elif downloader == DOWNLOADER_SPOTIFYDOWN:
+        file_ext = "mp3"
+
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title}.{file_ext}")
 
     global skip_duplicate_downloads
@@ -1035,11 +767,16 @@ def download_track_lucida(
 
     print(f"Downloading: '{out_file_title}'...")
 
-    audio_dl_resp = _download_track_lucida(track_url=track.url, file_format=file_type)
+    if downloader == DOWNLOADER_LUCIDA:
+        audio_dl_resp = _download_track_lucida(track_url=track.url, file_format=file_type)
+
+    elif downloader == DOWNLOADER_SPOTIFYDOWN:
+        audio_dl_resp = _download_track_spotifydown(track=track)
 
     if not audio_dl_resp.ok:
+        print("\tDownload failed.")
         raise RuntimeError(
-            f"Bad download response for track '{out_file_title}' ({track.id}): {audio_dl_resp.content}"
+            f"Bad download response for track '{out_file_title}' ({track.id}): [{audio_dl_resp.status_code}] {audio_dl_resp.content}"
         )
 
     with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
@@ -1062,10 +799,8 @@ def download_track_lucida(
     if track.track_number:
         mp3_file.tag.track_num = track.track_number
 
-    # default version lets album art show up in Serato
-    mp3_file.tag.save()
-    # version fixes FRONT_COVER not showing up in windows explorer
-    #mp3_file.tag.save(version=ID3_V2_3)
+    # remove version arg if album art not showing up in Serato
+    mp3_file.tag.save(version=ID3_V2_3)
 
     # prevent API throttling
     sleep(0.5)
@@ -1073,15 +808,16 @@ def download_track_lucida(
     print("\tDone.")
 
 
-def download_all_tracks_lucida(
+def download_all_tracks(
     tracks_to_dl: list,
     output_dir: Path,
     interactive: bool,
     skip_duplicate_downloads: bool,
+    downloader: str = DOWNLOADER_LUCIDA,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     debug_mode: bool = False
 ) -> list:
-    print(f"\nDownloading to '{output_dir.absolute()}'.\n")
+    print(f"\nDownloading to '{output_dir.absolute()}' using {downloader.capitalize()}.\n")
 
     print('-' * 32)
 
@@ -1091,10 +827,11 @@ def download_all_tracks_lucida(
     for idx, (track_obj, out_file_title) in enumerate(tracks, start=1):
         print(f"[{idx:>3}/{len(tracks):>3}]", end=' ')
         try:
-            download_track_lucida(
+            download_track(
                 track=track_obj,
                 out_file_title=out_file_title,
                 dest_dir=output_dir,
+                downloader=downloader,
                 file_type=file_type,
                 interactive=interactive,
                 skip_duplicates=skip_duplicate_downloads
@@ -1123,9 +860,10 @@ def download_all_tracks_lucida(
     return broken_tracks
 
 
-def spotify_downloader_lucida(
+def spotify_downloader(
     interactive: bool,
     spotify_token: str,
+    downloader: str = DOWNLOADER_LUCIDA,
     urls: list = None,
     output_dir: Path = None,
     create_dir: bool = None,
@@ -1137,15 +875,19 @@ def spotify_downloader_lucida(
     loop_prompt = True
 
     broken_tracks = []
-    while loop_prompt and (tracks_to_dl := get_tracks_to_download_lucida(interactive, spotify_token, filename_template, urls)):
+    while loop_prompt and (tracks_to_dl := get_tracks_to_download(
+            interactive=interactive,
+            spotify_token=spotify_token,
+            filename_template=filename_template,cli_arg_urls=urls)):
 
         print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
         output_dir = set_output_dir(interactive, output_dir, create_dir)
 
         broken_tracks.extend(
-            download_all_tracks_lucida(
+            download_all_tracks(
                 tracks_to_dl=tracks_to_dl,
+                downloader=downloader,
                 output_dir=output_dir,
                 interactive=interactive,
                 skip_duplicate_downloads=skip_duplicate_downloads,
@@ -1157,8 +899,6 @@ def spotify_downloader_lucida(
             loop_prompt = False
 
     return broken_tracks
-
-##############################################################################################################################
 
 
 def parse_args():
@@ -1176,15 +916,25 @@ def parse_args():
     parser.add_argument(
         '-f',
         '--filename',
+        '--filename-template',
         type=str,
         default=FILENAME_TEMPLATE_DEFAULT,
-        help="Specify custom filename."
+        help=r"Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'."
+    )
+    parser.add_argument(
+        '-d',
+        '--downloader',
+        type=str,
+        default=DOWNLOADER_LUCIDA,
+        choices=DOWNLOADER_OPTIONS,
+        help="Specify download server to use."
     )
     parser.add_argument(
         '-t',
         '--file-type',
         type=str,
         default=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
+        choices=DOWNLOADER_LUCIDA_FILE_FORMATS,
         help=f"Specify audio file format to download.  Must be one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}."
     )
     parser.add_argument(
@@ -1241,21 +991,15 @@ def main():
         # Interactive mode
         interactive = True
 
+        downloader = get_downloader_from_user()
         filename_template = get_filename_template_from_user()
-        out_file_type = get_file_type_from_user()
+        if downloader == DOWNLOADER_LUCIDA:
+            out_file_type = get_file_type_from_user()
 
-        # broken_tracks = spotify_downloader(
-        #     interactive=interactive,
-        #     output_dir=None,
-        #     urls=None,
-        #     create_dir=None,
-        #     debug_mode=None
-        # )
-
-        # Lucida
-        broken_tracks = spotify_downloader_lucida(
+        broken_tracks = spotify_downloader(
             interactive=interactive,
             spotify_token=token,
+            downloader=downloader,
             output_dir=None,
             urls=None,
             create_dir=None,
@@ -1271,6 +1015,7 @@ def main():
         args = parse_args()
 
         out_file_type = args.file_type
+        downloader = args.downloader
 
         if not (config_file := args.config_file):
 
@@ -1280,19 +1025,10 @@ def main():
                     "supplied if not using a config file"
                 )
 
-            # broken_tracks = spotify_downloader(
-            #     interactive=interactive,
-            #     output_dir=args.output,
-            #     urls=urls,
-            #     create_dir=args.create_dir,
-            #     skip_duplicate_downloads=args.skip_duplicate_downloads,
-            #     debug_mode=args.debug,
-            #     filename_template=args.filename
-            # )
-
-            broken_tracks = spotify_downloader_lucida(
+            broken_tracks = spotify_downloader(
                 interactive=interactive,
                 spotify_token=token,
+                downloader=downloader,
                 output_dir=args.output,
                 urls=urls,
                 create_dir=args.create_dir,
@@ -1308,19 +1044,11 @@ def main():
 
             for entry in loaded_config:
                 broken_tracks.extend(
-                    # spotify_downloader(
-                    #     interactive=interactive,
-                    #     output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
-                    #     urls=[entry['url']],
-                    #     create_dir=entry.get('create_dir'),
-                    #     skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
-                    #     debug_mode=args.debug,
-                    #     filename_template=entry.get('filename_template')
-                    # )
-                    spotify_downloader_lucida(
+                    spotify_downloader(
                         interactive=interactive,
                         output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
                         spotify_token=token,
+                        downloader=downloader or entry.get('downloader', DOWNLOADER_LUCIDA),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
                         skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
@@ -1351,11 +1079,11 @@ def main():
                 print(f"Attempt {i + 1} of {num_retries}")
                 for track, out_file_title, output_dir in broken_tracks.copy():
                     try:
-                        #download_track(track, out_file_title, output_dir)
-                        download_track_lucida(
+                        download_track(
                             track=track,
                             out_file_title=out_file_title,
                             dest_dir=output_dir,
+                            downloader=downloader,
                             file_type=out_file_type
                         )
                     except Exception:

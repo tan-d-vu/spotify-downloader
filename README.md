@@ -11,16 +11,20 @@ When run without any arguments, interactive mode is used.  The user is prompted 
 ## CLI mode
 
 ```shell
-usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f TEMPLATE] [-o OUTPUT] [-c] [-s] [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--debug]
+usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f FILENAME] [-d {lucida,spotifydown}] [-t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}] [-o OUTPUT] [-c] [-s]
+                     [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--debug]
 
 optional arguments:
+  -h, --help            show this help message and exit
   -u URLS [URLS ...], --urls URLS [URLS ...]
-                        URL(s) of Sptofy songs, albums, or playlists to download. If an album or playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
-                        'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
-  -f TEMPLATE, --filename TEMPLATE
-                        Specify custom filename. Use the following tags inside quotation marks: {artist}, {title}, {track_num}
-			Example: --filename "{track_num} - {title}". If not specified, filename = "{title} - {artist}". Note that changing this will cause tracks downloaded using a different 
-                        template to not be recognized.
+                        URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
+                        'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.    
+  -f FILENAME_TEMPLATE, --filename-template FILENAME_TEMPLATE
+                        Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'.
+  -d {lucida,spotifydown}, --downloader {lucida,spotifydown}
+                        Specify download server to use.
+  -t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}, --file-type {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}
+                        Specify audio file format to download. Must be one of mp3-320, mp3-256, mp3-128, ogg-320, ogg-256, ogg-128, original.
   -o OUTPUT, --output OUTPUT
                         Path to directory where tracks should be downloaded to
   -c, --create-dir      Create the output directory if it does not exist.
@@ -65,6 +69,15 @@ Example of JSON file used to contain download instructions:
     "skip_duplicate_downloads": true
   }
 ]
+
+The following arguments can be specified in entries within the config JSON:
+* `url` (Required)
+* `output_dir`
+* `create_dir`
+* `skip_duplicate_downloads`
+* `filename_template`
+* `file_type`
+There types and use match those of the CLI arguments.  
 
 _The argument `--retry-failed-downloads` does not need to be put into the config JSON.  It should be run when using the `--config-file` arg, e.g., `spotify_dl --config-file path/to/config.json --retry-failed-downloads 3`_
 ```
