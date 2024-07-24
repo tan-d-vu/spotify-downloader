@@ -328,7 +328,7 @@ def validate_config_file(config_file: Path) -> list:
 
 def get_filename_template_from_user() -> str:
     print(
-        "If you would like to use a different naming pattern for the file, enter it now.\n"
+        "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
         f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
         r"Must be contained in curly braces {}"
         f"\n\nDefault: \"{FILENAME_TEMPLATE_DEFAULT}\"\n\n"
@@ -351,7 +351,7 @@ def get_filename_template_from_user() -> str:
 
 def get_downloader_from_user() -> str:
     print(
-        "If you would like to use a different naming pattern for the file, enter it now.\n"
+        "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
         f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
         r"Must be contained in curly braces {}"
         f"\n\nDefault: \"{DOWNLOADER_LUCIDA}\"\n\n"
@@ -372,7 +372,7 @@ def get_downloader_from_user() -> str:
 
 def get_file_type_from_user() -> str:
     print(
-        "If you would like to download using a different audio format, enter it now.\n"
+        "\nIf you would like to download using a different audio format, enter it now.\n"
         f"Formats allowed: {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}.\n\n"
         f"Default: \"{DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT}\"\n\n"
     )
@@ -773,7 +773,9 @@ def download_track(
     elif downloader == DOWNLOADER_SPOTIFYDOWN:
         audio_dl_resp = _download_track_spotifydown(track=track)
 
-    if not audio_dl_resp.ok:
+    # Lucida returns HTML when it has a problem
+    if not audio_dl_resp.ok \
+            or audio_dl_resp.content.startswith(b"<!doctype html>"):
         print("\tDownload failed.")
         raise RuntimeError(
             f"Bad download response for track '{out_file_title}' ({track.id}): [{audio_dl_resp.status_code}] {audio_dl_resp.content}"
@@ -783,6 +785,7 @@ def download_track(
         track_mp3_fp.write(audio_dl_resp.content)
 
     mp3_file = eyed3.load(dest_dir/track_filename)
+
     if not mp3_file.tag:
         mp3_file.initTag()
 
@@ -989,9 +992,13 @@ def main():
         interactive = True
 
         downloader = get_downloader_from_user()
+
         filename_template = get_filename_template_from_user()
+
         if downloader == DOWNLOADER_LUCIDA:
             out_file_type = get_file_type_from_user()
+        else:
+            out_file_type = "mp3"
 
         broken_tracks = spotify_downloader(
             interactive=interactive,
