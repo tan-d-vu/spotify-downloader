@@ -8,6 +8,7 @@ from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
 from time import sleep
+from typing import Union
 
 # Want to figure out how to do this without a third party module
 import eyed3
@@ -32,6 +33,17 @@ logging.getLogger('eyed3.core').warning = _suppress_warning
 # Cheeky Ctrl+C handler
 signal.signal(signal.SIGINT, lambda sig, frame : print('\n\nInterrupt received. Exiting.\n') or sys.exit(0))
 
+### Cfg file constants
+CFG_SECTION_HEADER = "Settings"
+CFG_DEFAULT_FILENAME_TEMPLATE_OPTION = "default_filename_template"
+CFG_DEFAULT_DOWNLOADER_OPTION = "default_downloader"
+CFG_DEFAULT_FILE_TYPE_OPTION = "default_file_type"
+CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION = "default_download_location"
+CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION = "default_retry_downloads_attempts"
+
+### DOWNLOADER CONSTANTS ###
+
+## Spotifydown constants
 DOWNLOADER_SPOTIFYDOWN = "spotifydown"
 DOWNLOADER_SPOTIFYDOWN_URL = "https://api.spotifydown.com"
 # Clean browser heads for API
@@ -52,6 +64,7 @@ DOWNLOADER_SPOTIFYDOWN_HEADERS = {
     'TE': 'trailers'
 }
 
+## Lucida constants
 DOWNLOADER_LUCIDA = "lucida"
 DOWNLOADER_LUCIDA_URL = "https://lucida.to"
 DOWNLOADER_LUCIDA_FILE_FORMATS = ['mp3-320', 'mp3-256', 'mp3-128', 'ogg-320', 'ogg-256', 'ogg-128', 'original']
@@ -72,6 +85,7 @@ DOWNLOADER_LUCIDA_HEADERS = {
 }
 
 DOWNLOADER_OPTIONS = [DOWNLOADER_LUCIDA, DOWNLOADER_SPOTIFYDOWN]
+DOWNOADER_DEFAULT = DOWNLOADER_LUCIDA
 
 MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
@@ -271,14 +285,6 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
 
 ###################
 
-
-def parse_cfg(cfg_path: Path) -> ConfigParser:
-    parser = ConfigParser()
-    parser.read(cfg_path)
-
-    return parser
-
-
 def _validate_filename_template(given_str: str):
     if not any(var in given_str for var in FILENAME_TEMPLATE_VARS):
         raise ValueError(
@@ -326,12 +332,85 @@ def validate_config_file(config_file: Path) -> list:
     return loaded_config
 
 
-def get_filename_template_from_user() -> str:
+def parse_cfg(cfg_path: Path) -> ConfigParser:
+    parser = ConfigParser()
+
+    # just in case
+    if not isinstance(cfg_path, (Path, str)):
+        cfg_path = str(cfg_path)
+
+    if not cfg_path.is_file():
+        return parser
+
+    try:
+        parser.read(cfg_path)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Cfg file at {cfg_path} received a parsing error: {exc}"
+        )
+
+    # validate
+
+    if CFG_SECTION_HEADER not in parser:
+        raise ValueError(
+            f"Cfg file at {cfg_path} does not contain section '{CFG_SECTION_HEADER}'."
+        )
+
+    if default_filename_template := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILENAME_TEMPLATE_OPTION, fallback=None):
+        try:
+            _validate_filename_template(default_filename_template)
+        except Exception as exc:
+            raise ValueError(
+                f"Cfg file at {cfg_path} has an invalid value for "
+                f"'{CFG_DEFAULT_FILENAME_TEMPLATE_OPTION}': {exc}."
+            )
+
+    if (default_downloader := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=None)) \
+            and (default_downloader_lower := default_downloader.lower()) not in DOWNLOADER_OPTIONS:
+        raise ValueError(
+            f"Cfg file at {cfg_path} has an invalid value for "
+            f"'{CFG_DEFAULT_DOWNLOADER_OPTION}': '{default_downloader_lower}' "
+            f"is not one of {', '.join(DOWNLOADER_OPTIONS)}."
+        )
+
+    if (default_file_type := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=None)) \
+            and (file_type_lower := default_file_type.lower()) not in DOWNLOADER_LUCIDA_FILE_FORMATS:
+        raise ValueError(
+            f"Cfg file at {cfg_path} has an invalid value for "
+            f"'{CFG_DEFAULT_FILE_TYPE_OPTION}': '{file_type_lower}' "
+            f"is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}"
+        )
+
+    if (default_download_location := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=None)) \
+            and not Path(default_download_location).is_dir():
+        raise ValueError(
+            f"Cfg file at {cfg_path} has an invalid value for "
+            f"'{CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION}': '{default_download_location}' "
+            f"was not found."
+        )
+
+    if (default_num_retries := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=None)) \
+            and not str(default_num_retries).isnumeric():
+        raise ValueError(
+            f"Cfg file at {cfg_path} has an invalid value for "
+            f"'{CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION}': '{default_num_retries}' "
+            f"is not an integer."
+        )
+
+    return parser
+
+
+def get_filename_template_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
+    default_filename_template = FILENAME_TEMPLATE_DEFAULT
+
+    if spotify_dl_cfg:
+        default_filename_template = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILENAME_TEMPLATE_OPTION, fallback=FILENAME_TEMPLATE_DEFAULT)
+
     print(
         "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
         f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
         r"Must be contained in curly braces {}"
-        f"\n\nDefault: \"{FILENAME_TEMPLATE_DEFAULT}\"\n\n"
+        f"\n\nDefault: \"{default_filename_template}\"\n\n"
     )
 
     # loop until we get something we can use
@@ -339,8 +418,10 @@ def get_filename_template_from_user() -> str:
         filename_resp = input(
             "Filename or press [ENTER] to use default: "
         )
+
         if not filename_resp:
-            return FILENAME_TEMPLATE_DEFAULT
+            return default_filename_template
+
         try:
             _validate_filename_template(filename_resp)
         except ValueError as exc:
@@ -349,12 +430,17 @@ def get_filename_template_from_user() -> str:
             return filename_resp
 
 
-def get_downloader_from_user() -> str:
+def get_downloader_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
+    default_downloader=DOWNOADER_DEFAULT
+
+    if spotify_dl_cfg:
+        default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNOADER_DEFAULT)
+
     print(
         "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
         f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
         r"Must be contained in curly braces {}"
-        f"\n\nDefault: \"{DOWNLOADER_LUCIDA}\"\n\n"
+        f"\n\nDefault: \"{default_downloader}\"\n\n"
     )
 
     # loop until we get something we can use
@@ -362,19 +448,26 @@ def get_downloader_from_user() -> str:
         downloader_resp = input(
             f"Select {' or '.join(map(repr, DOWNLOADER_OPTIONS))} or press [ENTER] to use default: "
         )
+
         if not downloader_resp:
-            return DOWNLOADER_LUCIDA
+            return default_downloader
+
         if (downloader_resp_lower := downloader_resp.lower()) not in DOWNLOADER_OPTIONS:
             print(f"'{downloader_resp_lower}' is not one of {', '.join(DOWNLOADER_OPTIONS)}")
         else:
             return downloader_resp_lower
 
 
-def get_file_type_from_user() -> str:
+def get_file_type_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
+    default_file_type = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT
+
+    if spotify_dl_cfg:
+        default_file_type = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT)
+
     print(
         "\nIf you would like to download using a different audio format, enter it now.\n"
         f"Formats allowed: {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}.\n\n"
-        f"Default: \"{DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT}\"\n\n"
+        f"Default: \"{default_file_type}\"\n\n"
     )
 
     # loop until we get something we can use
@@ -382,8 +475,10 @@ def get_file_type_from_user() -> str:
         file_type_resp = input(
             "File format or press [ENTER] to use default: "
         )
+
         if not file_type_resp:
-            return DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT
+            return default_file_type
+
         if (file_type_lower := file_type_resp.lower()) not in DOWNLOADER_LUCIDA_FILE_FORMATS:
             print(f"'{file_type_lower}' is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}")
         else:
@@ -408,12 +503,16 @@ def assemble_track_custom_title(
     return template
 
 
-def set_output_dir(interactive: bool, cli_arg_output_dir: Path, cli_arg_create_dir: bool = None) -> None:
+def set_output_dir(
+    interactive: bool,
+    cli_arg_output_dir: Path,
+    cli_arg_create_dir: bool = None,
+    spotify_dl_cfg: Union[ConfigParser,None] = None
+) -> None:
     default_output_dir = Path.home()/'Downloads'
 
-    if (spotify_dl_cfg_path := Path.home()/".spotify_dl.cfg").is_file():
-        spotify_dl_cfg = parse_cfg(spotify_dl_cfg_path)
-        default_output_dir = spotify_dl_cfg.get("Settings", "default_download_location", fallback=default_output_dir)
+    if spotify_dl_cfg:
+        default_output_dir = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=default_output_dir)
 
     if interactive:
         output_dir = Path(default_output_dir)
@@ -717,7 +816,7 @@ def download_track(
     track: SpotifySong,
     out_file_title: str,
     dest_dir: Path,
-    downloader: str = DOWNLOADER_LUCIDA,
+    downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
     skip_duplicates: bool = False
@@ -816,7 +915,7 @@ def download_all_tracks(
     output_dir: Path,
     interactive: bool,
     skip_duplicate_downloads: bool,
-    downloader: str = DOWNLOADER_LUCIDA,
+    downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     debug_mode: bool = False
 ) -> list:
@@ -863,11 +962,12 @@ def download_all_tracks(
 def spotify_downloader(
     interactive: bool,
     spotify_token: str,
-    downloader: str = DOWNLOADER_LUCIDA,
+    downloader: str = DOWNOADER_DEFAULT,
     urls: list = None,
     output_dir: Path = None,
     create_dir: bool = None,
     skip_duplicate_downloads: bool = None,
+    spotify_dl_cfg: Union[ConfigParser,None] = None,
     debug_mode: bool = None,
     filename_template: str = FILENAME_TEMPLATE_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT
@@ -882,7 +982,7 @@ def spotify_downloader(
 
         print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
-        output_dir = set_output_dir(interactive, output_dir, create_dir)
+        output_dir = set_output_dir(interactive, output_dir, create_dir, spotify_dl_cfg)
 
         broken_tracks.extend(
             download_all_tracks(
@@ -925,7 +1025,7 @@ def parse_args():
         '-d',
         '--downloader',
         type=str,
-        default=DOWNLOADER_LUCIDA,
+        default=DOWNOADER_DEFAULT,
         choices=DOWNLOADER_OPTIONS,
         help="Specify download server to use."
     )
@@ -969,6 +1069,11 @@ def parse_args():
         help="Number of times to retry failed downloads."
     )
     parser.add_argument(
+        '--cfg-file',
+        type=Path,
+        help="Path to .cfg file used for user default settings if not using `$HOME/.spotify_dl.cfg`."
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         default=False,
@@ -986,17 +1091,19 @@ def main():
     # clientId, accessToken
     token = token_resp.json()['accessToken']
 
+    spotify_dl_cfg = parse_cfg(Path.home()/".spotify_dl.cfg")
+
     # No given args
     if len(sys.argv) == 1:
         # Interactive mode
         interactive = True
 
-        downloader = get_downloader_from_user()
+        downloader = get_downloader_from_user(spotify_dl_cfg)
 
-        filename_template = get_filename_template_from_user()
+        filename_template = get_filename_template_from_user(spotify_dl_cfg)
 
         if downloader == DOWNLOADER_LUCIDA:
-            out_file_type = get_file_type_from_user()
+            out_file_type = get_file_type_from_user(spotify_dl_cfg)
         else:
             out_file_type = "mp3"
 
@@ -1007,6 +1114,7 @@ def main():
             output_dir=None,
             urls=None,
             create_dir=None,
+            spotify_dl_cfg=spotify_dl_cfg,
             debug_mode=None,
             filename_template=filename_template,
             file_type=out_file_type
@@ -1017,6 +1125,9 @@ def main():
         interactive = False
 
         args = parse_args()
+
+        if args.cfg_file:
+            spotify_dl_cfg = parse_cfg(args.cfg_file)
 
         out_file_type = args.file_type
         downloader = args.downloader
@@ -1037,6 +1148,7 @@ def main():
                 urls=urls,
                 create_dir=args.create_dir,
                 skip_duplicate_downloads=args.skip_duplicate_downloads,
+                spotify_dl_cfg=spotify_dl_cfg,
                 debug_mode=args.debug,
                 filename_template=args.filename
             )
@@ -1052,10 +1164,11 @@ def main():
                         interactive=interactive,
                         output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
                         spotify_token=token,
-                        downloader=downloader or entry.get('downloader', DOWNLOADER_LUCIDA),
+                        downloader=downloader or entry.get('downloader', DOWNOADER_DEFAULT),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
                         skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
+                        spotify_dl_cfg=spotify_dl_cfg,
                         debug_mode=args.debug,
                         filename_template=entry.get('filename_template'),
                         file_type=entry.get('file_type', DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT)
@@ -1069,13 +1182,19 @@ def main():
             f"  * {f'{nl}  * '.join(out_file_title for _, out_file_title, _ in broken_tracks)}\n"
         )
 
+        num_retries_cfg = int(spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=0))
+
         if not interactive:
-            num_retries = args.retry_failed_downloads or 0
+            num_retries = args.retry_failed_downloads or num_retries_cfg
         else:
             resp = input("Would you like to retry downloading these tracks? [y/N]\n")
             if resp.lower() == 'y':
-                # Input handling needed here
-                num_retries = int(input("How many attempts?\n"))
+                while 1:
+                    try:
+                        num_retries = num_retries_cfg or int(input("How many attempts?\n"))
+                        break
+                    except Exception:
+                        print("Invalid response. Please enter a number.\n")
 
         if num_retries:
             print("Re-attempting to download tracks")

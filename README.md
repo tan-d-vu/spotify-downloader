@@ -12,7 +12,7 @@ When run without any arguments, interactive mode is used.  The user is prompted 
 
 ```shell
 usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f FILENAME] [-d {lucida,spotifydown}] [-t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}] [-o OUTPUT] [-c] [-s]
-                     [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--debug]
+                     [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--cfg-file CFG_FILE] [--debug]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -34,19 +34,29 @@ optional arguments:
                         Path to JSON containing download instructions.
   --retry-failed-downloads RETRY_FAILED_DOWNLOADS
                         Number of times to retry failed downloads.
+  --cfg-file CFG_FILE
+                        Path to .cfg file used for user default settings if not using `$HOME/.spotify_dl.cfg`.
   --debug               Debug mode.
 ```
 
 ### Cfg file
 
-Not to be confused with the "config" file below (bad name, I know. I'll change it at some point), The user can define a file named `.spotify_dl.cfg` in their home directory (in Windows, it's `C:\Users\[Your user]\`) to define settings that will always be used by the downloader.  
+Not to be confused with the "config" file below (bad name, I know. I'll change it at some point), The user can define a file named `.spotify_dl.cfg` in their home directory (in Windows, it's `C:\Users\[Your user]\`) to define settings that will always be used by this tool.  The `Settings` section **must** be defined.
+
+Example:
 
 ```
 [Settings]
 default_download_location="C:\Users\me\Desktop\folder"
+default_filename_template="{artist} - {title}"
 ```
 
-Currently, only `default_download_location` is supported
+The following values are supported:
+* `default_download_location`: Path to directory/folder to download tracks to.
+* `default_downloader`: Downloader to use.  Either `lucida` or `spotifydown`.
+* `default_file_type`: Audio file type to download _(Only applicable when using Lucida)_.
+* `default_filename_template`: Filename format template to use when naming downloads.
+* `default_retry_downloads_attempts`: Number of attempts to retry downloading tracks that failed to download.
 
 
 ### Config file
@@ -69,6 +79,7 @@ Example of JSON file used to contain download instructions:
     "skip_duplicate_downloads": true
   }
 ]
+```
 
 The following arguments can be specified in entries within the config JSON:
 * `url` (Required)
@@ -79,5 +90,4 @@ The following arguments can be specified in entries within the config JSON:
 * `file_type`
 There types and use match those of the CLI arguments.  
 
-_The argument `--retry-failed-downloads` does not need to be put into the config JSON.  It should be run when using the `--config-file` arg, e.g., `spotify_dl --config-file path/to/config.json --retry-failed-downloads 3`_
-```
+_The arguments `--retry-failed-downloads` and `--cfg-file` do not need to be put into the config JSON.  It should be run when using the respective args when executing the tool, e.g., `spotify_dl --config-file path/to/config.json --retry-failed-downloads 3`_
