@@ -11,15 +11,14 @@ When run without any arguments, interactive mode is used.  The user is prompted 
 ## CLI mode
 
 ```shell
-usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f FILENAME] [-d {lucida,spotifydown}] [-t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}] [-o OUTPUT] [-c] [-s]
-                     [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--cfg-file CFG_FILE] [--debug]
+usage: spotify_dl.py [-h] [-u URLS [URLS ...]] [-f FILENAME] [-d {lucida,spotifydown}] [-t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}] [-o OUTPUT] [-c] [-p {skip,overwrite,append_number}] [-k CONFIG_FILE] [--retry-failed-downloads RETRY_FAILED_DOWNLOADS] [--cfg-file CFG_FILE] [--debug] [-s]
 
 optional arguments:
   -h, --help            show this help message and exit
   -u URLS [URLS ...], --urls URLS [URLS ...]
                         URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
-                        'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.    
-  -f FILENAME_TEMPLATE, --filename-template FILENAME_TEMPLATE
+                        'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
+  -f FILENAME, --filename FILENAME, --filename-template FILENAME
                         Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'.
   -d {lucida,spotifydown}, --downloader {lucida,spotifydown}
                         Specify download server to use.
@@ -28,14 +27,15 @@ optional arguments:
   -o OUTPUT, --output OUTPUT
                         Path to directory where tracks should be downloaded to
   -c, --create-dir      Create the output directory if it does not exist.
-  -s, --skip-duplicate-downloads
+  -p {skip,overwrite,append_number}, --duplicate-download-handling {skip,overwrite,append_number}
                         Don't download a song if the file already exists in the output directory.
   -k CONFIG_FILE, --config-file CONFIG_FILE
                         Path to JSON containing download instructions.
   --retry-failed-downloads RETRY_FAILED_DOWNLOADS
                         Number of times to retry failed downloads.
-  --cfg-file CFG_FILE
-                        Path to .cfg file used for user default settings if not using `$HOME/.spotify_dl.cfg`.
+  --cfg-file CFG_FILE   Path to .cfg file used for user default settings if not using `$HOME/.spotify_dl.cfg`.
+  -s, --skip-duplicate-downloads
+                        [To be deprecated] Don't download a song if the file already exists in the output directory.
   --debug               Debug mode.
 ```
 
@@ -57,6 +57,7 @@ The following values are supported:
 * `default_file_type`: Audio file type to download _(Only applicable when using Lucida)_.
 * `default_filename_template`: Filename format template to use when naming downloads.
 * `default_retry_downloads_attempts`: Number of attempts to retry downloading tracks that failed to download.
+* `duplicate_download_handling`: How to handle downloads for files that already exist.  Options are `skip`, `overwrite`, or `append_number`
 
 
 ### Config file
@@ -86,6 +87,7 @@ The following arguments can be specified in entries within the config JSON:
 * `output_dir`
 * `create_dir`
 * `skip_duplicate_downloads`
+* `duplicate_download_handling`
 * `filename_template`
 * `file_type`
 There types and use match those of the CLI arguments.  

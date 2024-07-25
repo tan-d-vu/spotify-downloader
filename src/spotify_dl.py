@@ -8,7 +8,6 @@ from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
 from time import sleep
-from typing import Union
 
 # Want to figure out how to do this without a third party module
 import eyed3
@@ -40,6 +39,7 @@ CFG_DEFAULT_DOWNLOADER_OPTION = "default_downloader"
 CFG_DEFAULT_FILE_TYPE_OPTION = "default_file_type"
 CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION = "default_download_location"
 CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION = "default_retry_downloads_attempts"
+CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING = "duplicate_download_handling"
 
 ### DOWNLOADER CONSTANTS ###
 
@@ -94,8 +94,10 @@ FILENAME_TEMPLATE_DEFAULT = r"{title} - {artist}"
 
 # In interactive mode, user is prompted upon first duplicate encountered
 # Otherwise, set via CLI arg
-skip_duplicate_downloads = False
-skip_duplicate_downloads_prompted = False
+DUPLICATE_DOWNLOAD_CHOICES = ["skip", "overwrite", "append_number"]
+DUPLICATE_DOWNLOAD_CHOICE_DEFAULT = "overwrite"
+duplicate_downloads_action = DUPLICATE_DOWNLOAD_CHOICE_DEFAULT
+duplicate_downloads_prompted = False
 
 
 ##### Spotify stuff #####
@@ -302,12 +304,13 @@ def _validate_filename_template(given_str: str):
 
 def validate_config_file(config_file: Path) -> list:
     allowed_args = {
-        'url': str,
-        'output_dir': str,
-        'create_dir': bool,
-        'skip_duplicate_downloads': bool,
-        'filename_template': str,
-        'file_type': str
+        'url': (str, None),
+        'output_dir': (str, None),
+        'create_dir': (bool, None),
+        'skip_duplicate_downloads': (bool, None),
+        'duplicate_download_handling': (str, DUPLICATE_DOWNLOAD_CHOICES),
+        'filename_template': (str, None),
+        'file_type': (str, DOWNLOADER_LUCIDA_FILE_FORMATS)
     }
 
     with open(config_file) as config_fp:
@@ -321,12 +324,20 @@ def validate_config_file(config_file: Path) -> list:
             if key not in allowed_args:
                 raise ValueError(
                     f"Key '{key}' in entry {e_idx} is not valid.  "
-                    f"Allowed keys are: {', '.join(allowed_args)}"
+                    f"Allowed keys are: {', '.join(allowed_args.keys())}"
                 )
-            elif not isinstance(entry[key], allowed_args[key]):
+            elif not isinstance(entry[key], allowed_args[key][0]):
                 raise ValueError(
                     f"Key '{key}' in entry {e_idx} is the wrong type.  "
                     f"Argument for '{key}' must be of type '{allowed_args[key]}'"
+                )
+
+            # specific validation
+            elif (allowed_values := allowed_args[key][1]) \
+                    and entry[key] not in allowed_values:
+                raise ValueError(
+                    f"Value for key '{key}' in entry {e_idx} is "
+                    f"not one of {' ,'.join(allowed_values)}"
                 )
 
     return loaded_config
@@ -345,66 +356,79 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     try:
         parser.read(cfg_path)
     except Exception as exc:
-        raise RuntimeError(
-            f"Cfg file at {cfg_path} received a parsing error: {exc}"
+        print(
+            f"[!] Cfg file at {cfg_path} received a parsing error: {exc}"
         )
+        sys.exit(1)
 
     # validate
 
     if CFG_SECTION_HEADER not in parser:
-        raise ValueError(
-            f"Cfg file at {cfg_path} does not contain section '{CFG_SECTION_HEADER}'."
+        print(
+            f"[!] Cfg file at {cfg_path} does not contain section '{CFG_SECTION_HEADER}'."
         )
+        sys.exit(1)
 
     if default_filename_template := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILENAME_TEMPLATE_OPTION, fallback=None):
         try:
             _validate_filename_template(default_filename_template)
         except Exception as exc:
-            raise ValueError(
-                f"Cfg file at {cfg_path} has an invalid value for "
+            print(
+                f"[!] Cfg file at {cfg_path} has an invalid value for "
                 f"'{CFG_DEFAULT_FILENAME_TEMPLATE_OPTION}': {exc}."
             )
+            sys.exit(1)
 
     if (default_downloader := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=None)) \
             and (default_downloader_lower := default_downloader.lower()) not in DOWNLOADER_OPTIONS:
-        raise ValueError(
-            f"Cfg file at {cfg_path} has an invalid value for "
+        print(
+            f"[!] Cfg file at {cfg_path} has an invalid value for "
             f"'{CFG_DEFAULT_DOWNLOADER_OPTION}': '{default_downloader_lower}' "
             f"is not one of {', '.join(DOWNLOADER_OPTIONS)}."
         )
+        sys.exit(1)
 
     if (default_file_type := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=None)) \
             and (file_type_lower := default_file_type.lower()) not in DOWNLOADER_LUCIDA_FILE_FORMATS:
-        raise ValueError(
-            f"Cfg file at {cfg_path} has an invalid value for "
+        print(
+            f"[!] Cfg file at {cfg_path} has an invalid value for "
             f"'{CFG_DEFAULT_FILE_TYPE_OPTION}': '{file_type_lower}' "
             f"is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}"
         )
+        sys.exit(1)
 
     if (default_download_location := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=None)) \
             and not Path(default_download_location).is_dir():
-        raise ValueError(
-            f"Cfg file at {cfg_path} has an invalid value for "
+        print(
+            f"[!] Cfg file at {cfg_path} has an invalid value for "
             f"'{CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION}': '{default_download_location}' "
             f"was not found."
         )
+        sys.exit(1)
 
     if (default_num_retries := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=None)) \
             and not str(default_num_retries).isnumeric():
-        raise ValueError(
-            f"Cfg file at {cfg_path} has an invalid value for "
+        print(
+            f"[!] Cfg file at {cfg_path} has an invalid value for "
             f"'{CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION}': '{default_num_retries}' "
             f"is not an integer."
         )
+        sys.exit(1)
+
+    if (dup_dl_handling := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING, fallback=None)) \
+            and not dup_dl_handling in (allowed_vals := DUPLICATE_DOWNLOAD_CHOICES):
+        print(
+            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"'{CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING}': '{dup_dl_handling}' "
+            f"is not one of {', '.join(allowed_vals)}."
+        )
+        sys.exit(1)
 
     return parser
 
 
-def get_filename_template_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
-    default_filename_template = FILENAME_TEMPLATE_DEFAULT
-
-    if spotify_dl_cfg:
-        default_filename_template = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILENAME_TEMPLATE_OPTION, fallback=FILENAME_TEMPLATE_DEFAULT)
+def get_filename_template_from_user(spotify_dl_cfg: ConfigParser) -> str:
+    default_filename_template = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILENAME_TEMPLATE_OPTION, fallback=FILENAME_TEMPLATE_DEFAULT)
 
     print(
         "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
@@ -430,11 +454,8 @@ def get_filename_template_from_user(spotify_dl_cfg: Union[ConfigParser,None]) ->
             return filename_resp
 
 
-def get_downloader_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
-    default_downloader=DOWNOADER_DEFAULT
-
-    if spotify_dl_cfg:
-        default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNOADER_DEFAULT)
+def get_downloader_from_user(spotify_dl_cfg: ConfigParser) -> str:
+    default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNOADER_DEFAULT)
 
     print(
         "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
@@ -458,11 +479,8 @@ def get_downloader_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
             return downloader_resp_lower
 
 
-def get_file_type_from_user(spotify_dl_cfg: Union[ConfigParser,None]) -> str:
-    default_file_type = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT
-
-    if spotify_dl_cfg:
-        default_file_type = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT)
+def get_file_type_from_user(spotify_dl_cfg: ConfigParser) -> str:
+    default_file_type = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT)
 
     print(
         "\nIf you would like to download using a different audio format, enter it now.\n"
@@ -505,9 +523,9 @@ def assemble_track_custom_title(
 
 def set_output_dir(
     interactive: bool,
+    spotify_dl_cfg: ConfigParser,
     cli_arg_output_dir: Path,
     cli_arg_create_dir: bool = None,
-    spotify_dl_cfg: Union[ConfigParser,None] = None
 ) -> None:
     default_output_dir = Path.home()/'Downloads'
 
@@ -814,11 +832,13 @@ def process_input_url(url: str, filename_template: str, interactive: bool, spoti
 
 def download_track(
     track: SpotifySong,
+    spotify_dl_cfg: ConfigParser,
     out_file_title: str,
     dest_dir: Path,
     downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
+    duplicate_download_handling: str = "overwrite",
     skip_duplicates: bool = False
 ):
     if downloader == DOWNLOADER_LUCIDA:
@@ -829,15 +849,27 @@ def download_track(
 
     track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title}.{file_ext}")
 
-    global skip_duplicate_downloads
-    global skip_duplicate_downloads_prompted
+    global duplicate_downloads_action
+    global duplicate_downloads_prompted
 
     if (dest_dir/track_filename).exists():
-        if skip_duplicates or skip_duplicate_downloads:
+        # Use user's defined handling if there is one
+        if dup_dl_handling := spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING, fallback=None):
+
+            print("Using action defined in .cfg...")
+
+            duplicate_downloads_action = dup_dl_handling
+
+            # don't prompt the user
+            duplicate_downloads_prompted = True
+
+        if (duplicate_download_handling == "skip") \
+                or skip_duplicates \
+                or (duplicate_downloads_action == "skip"):
             print(f"Skipping download for '{out_file_title}'...")
             return
 
-        if interactive and not skip_duplicate_downloads_prompted:
+        if interactive and not duplicate_downloads_prompted:
             dup_song_inp = input(
                 f"The song '{out_file_title}' was already downloaded to {dest_dir.absolute()}.\n"
                 "  Would you like to download it again? [y/N]: "
@@ -847,22 +879,35 @@ def download_track(
                 print("\nSkipping download.\n")
                 # Prompt user if we haven't yet before skipping this one
 
-            if not skip_duplicate_downloads_prompted:
+            if not duplicate_downloads_prompted:
                 dup_all_inp = input(
                     "  Would you like to re-download songs that have already been downloaded? [y/N]: "
                 )
 
                 if not dup_all_inp or dup_all_inp.lower().startswith('n'):
-                    skip_duplicate_downloads = True
+                    duplicate_downloads_action = "skip"
                     print("\nSkipping duplicate downloads.\n")
-                else:
-                    skip_duplicate_downloads = False
-                    print("\nRe-downloading all tracks.\n")
+                elif dup_all_inp.lower().startswith('y'):
+                    dup_append_inp = input(
+                        "  Would you like to append a number to filenames for songs that have already been downloaded? [y/N]: "
+                    )
+                    if not dup_append_inp or dup_append_inp.lower().startswith('n'):
+                        duplicate_downloads_action = "overwrite"
+                        print("\nRe-downloading all tracks.\n")
+                    else:
+                        duplicate_downloads_action = "append_number"
+                        print("\nRe-downloading all tracks but not overwriting.\n")
 
-                skip_duplicate_downloads_prompted = True
+                duplicate_downloads_prompted = True
 
             if skip_this_dl:
                 return
+
+        if duplicate_downloads_action == "append_number":
+            num = 0
+            while (dest_dir/track_filename).exists():
+                num += 1
+                track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title} ({num}).{file_ext}")
 
     print(f"Downloading: '{out_file_title}'...")
 
@@ -914,7 +959,9 @@ def download_all_tracks(
     tracks_to_dl: list,
     output_dir: Path,
     interactive: bool,
+    duplicate_download_handling: str,
     skip_duplicate_downloads: bool,
+    spotify_dl_cfg: ConfigParser,
     downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     debug_mode: bool = False
@@ -933,11 +980,13 @@ def download_all_tracks(
         try:
             download_track(
                 track=track_obj,
+                spotify_dl_cfg=spotify_dl_cfg,
                 out_file_title=out_file_title,
                 dest_dir=output_dir,
                 downloader=downloader,
                 file_type=file_type,
                 interactive=interactive,
+                duplicate_download_handling=duplicate_download_handling,
                 skip_duplicates=skip_duplicate_downloads
             )
 
@@ -962,12 +1011,13 @@ def download_all_tracks(
 def spotify_downloader(
     interactive: bool,
     spotify_token: str,
+    spotify_dl_cfg: ConfigParser,
     downloader: str = DOWNOADER_DEFAULT,
     urls: list = None,
     output_dir: Path = None,
     create_dir: bool = None,
+    duplicate_download_handling: str = "overwrite",
     skip_duplicate_downloads: bool = None,
-    spotify_dl_cfg: Union[ConfigParser,None] = None,
     debug_mode: bool = None,
     filename_template: str = FILENAME_TEMPLATE_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT
@@ -982,14 +1032,16 @@ def spotify_downloader(
 
         print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
-        output_dir = set_output_dir(interactive, output_dir, create_dir, spotify_dl_cfg)
+        output_dir = set_output_dir(interactive, spotify_dl_cfg, output_dir, create_dir)
 
         broken_tracks.extend(
             download_all_tracks(
                 tracks_to_dl=tracks_to_dl,
+                interactive=interactive,
+                spotify_dl_cfg=spotify_dl_cfg,
                 downloader=downloader,
                 output_dir=output_dir,
-                interactive=interactive,
+                duplicate_download_handling=duplicate_download_handling,
                 skip_duplicate_downloads=skip_duplicate_downloads,
                 file_type=file_type,
                 debug_mode=debug_mode
@@ -1051,10 +1103,10 @@ def parse_args():
         help="Create the output directory if it does not exist."
     )
     parser.add_argument(
-        '-s',
-        '--skip-duplicate-downloads',
-        action='store_true',
-        default=False,
+        '-p',
+        '--duplicate-download-handling',
+        choices=DUPLICATE_DOWNLOAD_CHOICES,
+        default="overwrite",
         help="Don't download a song if the file already exists in the output directory."
     )
     parser.add_argument(
@@ -1078,6 +1130,14 @@ def parse_args():
         action='store_true',
         default=False,
         help="Debug mode."
+    )
+    # for backwards compatibility
+    parser.add_argument(
+        '-s',
+        '--skip-duplicate-downloads',
+        action='store_true',
+        default=False,
+        help="Don't download a song if the file already exists in the output directory."
     )
 
     return parser.parse_args()
@@ -1110,11 +1170,11 @@ def main():
         broken_tracks = spotify_downloader(
             interactive=interactive,
             spotify_token=token,
+            spotify_dl_cfg=spotify_dl_cfg,
             downloader=downloader,
             output_dir=None,
             urls=None,
             create_dir=None,
-            spotify_dl_cfg=spotify_dl_cfg,
             debug_mode=None,
             filename_template=filename_template,
             file_type=out_file_type
@@ -1143,12 +1203,13 @@ def main():
             broken_tracks = spotify_downloader(
                 interactive=interactive,
                 spotify_token=token,
+                spotify_dl_cfg=spotify_dl_cfg,
                 downloader=downloader,
                 output_dir=args.output,
                 urls=urls,
                 create_dir=args.create_dir,
+                duplicate_download_handling=args.duplicate_download_handling,
                 skip_duplicate_downloads=args.skip_duplicate_downloads,
-                spotify_dl_cfg=spotify_dl_cfg,
                 debug_mode=args.debug,
                 filename_template=args.filename
             )
@@ -1162,13 +1223,14 @@ def main():
                 broken_tracks.extend(
                     spotify_downloader(
                         interactive=interactive,
-                        output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
                         spotify_token=token,
+                        spotify_dl_cfg=spotify_dl_cfg,
+                        output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
                         downloader=downloader or entry.get('downloader', DOWNOADER_DEFAULT),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
-                        skip_duplicate_downloads=entry.get('skip_duplicate_downloads'),
-                        spotify_dl_cfg=spotify_dl_cfg,
+                        duplicate_download_handling=entry.get('duplicate_download_handling', "overwrite"),
+                        skip_duplicate_downloads=entry.get('skip_duplicate_downloads', False),
                         debug_mode=args.debug,
                         filename_template=entry.get('filename_template'),
                         file_type=entry.get('file_type', DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT)
@@ -1195,15 +1257,19 @@ def main():
                         break
                     except Exception:
                         print("Invalid response. Please enter a number.\n")
+            else:
+                print("Not attempting to download.")
+                num_retries = 0
 
         if num_retries:
             print("Re-attempting to download tracks")
             for i in range(num_retries):
-                print(f"Attempt {i + 1} of {num_retries}")
+                print(f"\nAttempt {i + 1} of {num_retries}")
                 for track, out_file_title, output_dir in broken_tracks.copy():
                     try:
                         download_track(
                             track=track,
+                            spotify_dl_cfg=spotify_dl_cfg,
                             out_file_title=out_file_title,
                             dest_dir=output_dir,
                             downloader=downloader,
