@@ -95,4 +95,4 @@ The following arguments can be specified in entries within the config JSON:
 * `file_type`
 There types and use match those of the CLI arguments.  
 
-_The arguments `--retry-failed-downloads` and `--cfg-file` do not need to be put into the config JSON.  It should be run when using the respective args when executing the tool, e.g., `spotify_dl --config-file path/to/config.json --retry-failed-downloads 3`_
+_The arguments `--retry-failed-downloads` and `--cfg-file` are not set in the config JSON.  It should be run when using the respective args when executing the tool, e.g., `spotify_dl --config-file path/to/config.json --retry-failed-downloads 3`_
