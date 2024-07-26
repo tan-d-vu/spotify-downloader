@@ -87,7 +87,7 @@ DOWNLOADER_LUCIDA_HEADERS = {
 }
 
 DOWNLOADER_OPTIONS = [DOWNLOADER_LUCIDA, DOWNLOADER_SPOTIFYDOWN]
-DOWNOADER_DEFAULT = DOWNLOADER_LUCIDA
+DOWNLOADER_DEFAULT = DOWNLOADER_LUCIDA
 
 MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
@@ -460,7 +460,7 @@ def get_filename_template_from_user(spotify_dl_cfg: ConfigParser) -> str:
 
 
 def get_downloader_from_user(spotify_dl_cfg: ConfigParser) -> str:
-    default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNOADER_DEFAULT)
+    default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNLOADER_DEFAULT)
 
     print(
         "\nIf you would like to use a different download source, enter it now.\n"
@@ -841,7 +841,7 @@ def download_track(
     out_file_title: str,
     output_dir: str,
     create_dir: bool,
-    downloader: str = DOWNOADER_DEFAULT,
+    downloader: str = DOWNLOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
     duplicate_download_handling: str = "overwrite",
@@ -977,7 +977,7 @@ def download_all_tracks(
     spotify_dl_cfg: ConfigParser,
     output_dir: str = OUTPUT_DIR_DEFAULT,
     create_dir: bool = False,
-    downloader: str = DOWNOADER_DEFAULT,
+    downloader: str = DOWNLOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     debug_mode: bool = False
 ) -> list:
@@ -1030,7 +1030,7 @@ def spotify_downloader(
     interactive: bool,
     spotify_token: str,
     spotify_dl_cfg: ConfigParser,
-    downloader: str = DOWNOADER_DEFAULT,
+    downloader: str = DOWNLOADER_DEFAULT,
     urls: list = None,
     output_dir: str = OUTPUT_DIR_DEFAULT,
     create_dir: bool = None,
@@ -1094,7 +1094,7 @@ def parse_args():
         '-d',
         '--downloader',
         type=str,
-        default=DOWNOADER_DEFAULT,
+        default=DOWNLOADER_DEFAULT,
         choices=DOWNLOADER_OPTIONS,
         help="Specify download server to use."
     )
@@ -1243,7 +1243,7 @@ def main():
                         spotify_token=token,
                         spotify_dl_cfg=spotify_dl_cfg,
                         output_dir=entry['output_dir'] if 'output_dir' in entry else OUTPUT_DIR_DEFAULT,
-                        downloader=downloader or entry.get('downloader', DOWNOADER_DEFAULT),
+                        downloader=downloader or entry.get('downloader', DOWNLOADER_DEFAULT),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
                         duplicate_download_handling=entry.get('duplicate_download_handling', "overwrite"),
