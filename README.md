@@ -6,7 +6,7 @@ The script `src/spotify_dl.py` can be run in interactive mode or CLI mode.
 
 ## Interactive mode
 
-When run without any arguments, interactive mode is used.  The user is prompted for URLs of songs or playlists.  If a playlist is given, the user has the option to download individual songs from that playlist or all of them as well as the ability to see the songs in the playlist prior to making a decision.  The default download directory is the user's `Downloads/` directory, e.g. `C:\Users\[USER]\Downloads\`.  The user is prompted if they want to change the directory prior to downloading the songs.
+When run without any arguments, interactive mode is used.  The user is prompted for URLs of songs or playlists.  If a playlist is given, the user has the option to download individual songs from that playlist or all of them as well as the ability to see the songs in the playlist prior to making a decision.  The default download directory is the user's `Downloads/` directory, e.g. `C:\Users\[USER]\Downloads\`.  The user is prompted if they want to change the directory prior to downloading the songs.  Template variables can be used in the path.
 
 ## CLI mode
 
@@ -19,7 +19,7 @@ optional arguments:
                         URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
                         'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
   -f FILENAME, --filename FILENAME, --filename-template FILENAME
-                        Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'.
+                        Specify custom filename template using variables '{title}', '{artist}', '{album}', and '{track_num}'.
   -d {lucida,spotifydown}, --downloader {lucida,spotifydown}
                         Specify download server to use.
   -t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}, --file-type {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}
@@ -54,7 +54,7 @@ default_filename_template="{artist} - {title}"
 The following values are supported:
 * `default_download_location`: Path to directory/folder to download tracks to.
 * `default_downloader`: Downloader to use.  Either `lucida` or `spotifydown`.
-* `default_file_type`: Audio file type to download _(Only applicable when using Lucida)_.
+* `default_file_type`: Audio file type to download.  See CLI output above for options. _(Only applicable when using Lucida)_.
 * `default_filename_template`: Filename format template to use when naming downloads.
 * `default_retry_downloads_attempts`: Number of attempts to retry downloading tracks that failed to download.
 * `duplicate_download_handling`: How to handle downloads for files that already exist.  Options are `skip`, `overwrite`, or `append_number`

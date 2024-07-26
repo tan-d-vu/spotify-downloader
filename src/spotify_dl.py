@@ -41,6 +41,8 @@ CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION = "default_download_location"
 CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION = "default_retry_downloads_attempts"
 CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING = "duplicate_download_handling"
 
+OUTPUT_DIR_DEFAULT = str(Path.home()/"Downloads")
+
 ### DOWNLOADER CONSTANTS ###
 
 ## Spotifydown constants
@@ -89,7 +91,7 @@ DOWNOADER_DEFAULT = DOWNLOADER_LUCIDA
 
 MULTI_TRACK_INPUT_URL_TRACK_NUMS_RE = re.compile(r'^https?:\/\/open\.spotify\.com\/(album|playlist)\/[\w]+(?:\?[\w=%-]*|)\|(?P<track_nums>.*)$')
 
-FILENAME_TEMPLATE_VARS = ["title", "artist", "track_num"]
+FILENAME_TEMPLATE_VARS = ["title", "artist", "album", "track_num"]
 FILENAME_TEMPLATE_DEFAULT = r"{title} - {artist}"
 
 # In interactive mode, user is prompted upon first duplicate encountered
@@ -109,14 +111,14 @@ class SpotifySong:
         artist: str,
         album: str,
         id: str,
-        track_number: int = 0,
+        track_number: str = "0",
         cover_art_url: str = "",
         release_date: str = ""
     ):
         self.title = title
         self.artist = artist
         self.album = album
-        self.track_number = track_number
+        self.track_number = str(track_number)
         self.id = id
         self.cover_art_url = cover_art_url
         self.release_date = release_date
@@ -287,8 +289,9 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
 
 ###################
 
-def _validate_filename_template(given_str: str):
-    if not any(var in given_str for var in FILENAME_TEMPLATE_VARS):
+def _validate_filename_template(given_str: str, required: bool = True):
+    if not any(var in given_str for var in FILENAME_TEMPLATE_VARS) \
+            and required:
         raise ValueError(
             "Filename should contain at least one of the following to "
             "prevent files from being overwritten: "
@@ -347,8 +350,8 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     parser = ConfigParser()
 
     # just in case
-    if not isinstance(cfg_path, (Path, str)):
-        cfg_path = str(cfg_path)
+    if not isinstance(cfg_path, Path):
+        cfg_path = Path(str(cfg_path))
 
     if not cfg_path.is_file():
         return parser
@@ -357,7 +360,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
         parser.read(cfg_path)
     except Exception as exc:
         print(
-            f"[!] Cfg file at {cfg_path} received a parsing error: {exc}"
+            f"[!] Cfg file at {cfg_path.absolute()} received a parsing error: {exc}"
         )
         sys.exit(1)
 
@@ -365,7 +368,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
 
     if CFG_SECTION_HEADER not in parser:
         print(
-            f"[!] Cfg file at {cfg_path} does not contain section '{CFG_SECTION_HEADER}'."
+            f"[!] Cfg file at {cfg_path.absolute()} does not contain section '{CFG_SECTION_HEADER}'."
         )
         sys.exit(1)
 
@@ -374,7 +377,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
             _validate_filename_template(default_filename_template)
         except Exception as exc:
             print(
-                f"[!] Cfg file at {cfg_path} has an invalid value for "
+                f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
                 f"'{CFG_DEFAULT_FILENAME_TEMPLATE_OPTION}': {exc}."
             )
             sys.exit(1)
@@ -382,7 +385,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     if (default_downloader := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=None)) \
             and (default_downloader_lower := default_downloader.lower()) not in DOWNLOADER_OPTIONS:
         print(
-            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
             f"'{CFG_DEFAULT_DOWNLOADER_OPTION}': '{default_downloader_lower}' "
             f"is not one of {', '.join(DOWNLOADER_OPTIONS)}."
         )
@@ -391,7 +394,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     if (default_file_type := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_FILE_TYPE_OPTION, fallback=None)) \
             and (file_type_lower := default_file_type.lower()) not in DOWNLOADER_LUCIDA_FILE_FORMATS:
         print(
-            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
             f"'{CFG_DEFAULT_FILE_TYPE_OPTION}': '{file_type_lower}' "
             f"is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}"
         )
@@ -400,7 +403,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     if (default_download_location := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=None)) \
             and not Path(default_download_location).is_dir():
         print(
-            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
             f"'{CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION}': '{default_download_location}' "
             f"was not found."
         )
@@ -409,7 +412,7 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     if (default_num_retries := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=None)) \
             and not str(default_num_retries).isnumeric():
         print(
-            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
             f"'{CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION}': '{default_num_retries}' "
             f"is not an integer."
         )
@@ -418,11 +421,13 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
     if (dup_dl_handling := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING, fallback=None)) \
             and not dup_dl_handling in (allowed_vals := DUPLICATE_DOWNLOAD_CHOICES):
         print(
-            f"[!] Cfg file at {cfg_path} has an invalid value for "
+            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
             f"'{CFG_DEFAULT_DUPLICATE_DOWNLOAD_HANDLING}': '{dup_dl_handling}' "
             f"is not one of {', '.join(allowed_vals)}."
         )
         sys.exit(1)
+
+    print(f"[-] Using user's .cfg file at {cfg_path.absolute()}.\n")
 
     return parser
 
@@ -458,9 +463,8 @@ def get_downloader_from_user(spotify_dl_cfg: ConfigParser) -> str:
     default_downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=DOWNOADER_DEFAULT)
 
     print(
-        "\nIf you would like to use a different naming pattern for the file, enter it now.\n"
-        f"Variables allowed: {', '.join(FILENAME_TEMPLATE_VARS)}.  "
-        r"Must be contained in curly braces {}"
+        "\nIf you would like to use a different download source, enter it now.\n"
+        f"Server options: {', '.join(DOWNLOADER_OPTIONS)}.  I'd recommend Lucida."
         f"\n\nDefault: \"{default_downloader}\"\n\n"
     )
 
@@ -503,37 +507,39 @@ def get_file_type_from_user(spotify_dl_cfg: ConfigParser) -> str:
             return file_type_lower
 
 
-def assemble_track_custom_title(
-    title: str,
+def assemble_str_from_template(
+    track: SpotifySong,
     template: str,
-    artist: str = "",
-    track_num: int = 1
+    required: bool = True
 ) -> str:
     if not template:
         template = FILENAME_TEMPLATE_DEFAULT
     else:
-        _validate_filename_template(template)
+        _validate_filename_template(template, required)
 
-    template = template.replace(r"{track_num}", str(track_num)) \
-        .replace(r"{title}", title) \
-        .replace(r"{artist}", artist)
+    template = template \
+        .replace(r"{track_num}", track.track_number) \
+        .replace(r"{title}", track.title) \
+        .replace(r"{album}", track.album) \
+        .replace(r"{artist}", track.artist)
 
     return template
 
 
 def set_output_dir(
     interactive: bool,
+    track: SpotifySong,
     spotify_dl_cfg: ConfigParser,
-    cli_arg_output_dir: Path,
+    cli_arg_output_dir: str,
     cli_arg_create_dir: bool = None,
-) -> None:
-    default_output_dir = Path.home()/'Downloads'
+) -> Path:
+    default_output_dir = str(Path.home()/'Downloads')
 
     if spotify_dl_cfg:
         default_output_dir = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=default_output_dir)
 
     if interactive:
-        output_dir = Path(default_output_dir)
+        output_dir = Path(assemble_str_from_template(track, default_output_dir, required=False))
         print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
 
         if other_dir := input("(New download location?) "):
@@ -547,7 +553,7 @@ def set_output_dir(
                 output_dir = Path(input("\nNew download location: "))
 
     else:
-        output_dir = cli_arg_output_dir
+        output_dir = Path(assemble_str_from_template(track, cli_arg_output_dir, required=False))
 
         if not output_dir.is_dir():
             if cli_arg_create_dir:
@@ -742,10 +748,8 @@ def process_input_url(url: str, filename_template: str, interactive: bool, spoti
             print(f"\t[!] Song not found{f' at {url}' if not interactive else ''}.")
             return []
 
-        out_file_title = assemble_track_custom_title(
-            title=track_obj.title,
-            artist=track_obj.artist,
-            track_num=0,
+        out_file_title = assemble_str_from_template(
+            track=track_obj,
             template=filename_template
         )
 
@@ -810,16 +814,17 @@ def process_input_url(url: str, filename_template: str, interactive: bool, spoti
 
         for track in sorted(tracks_to_dl, key=album_or_playlist_tracks.index):
 
-            track_num = album_or_playlist_tracks.index(track) + 1
+            # pad with 0s based on length of str of number of tracks in album/playlist
+            track_num = str(album_or_playlist_tracks.index(track) + 1).zfill(len(str(len(album_or_playlist_tracks))))
 
-            out_file_title = assemble_track_custom_title(
-                title=track.title,
-                artist=track.artist,
-                track_num=track_num,
+            track.track_number = track_num
+
+            out_file_title = assemble_str_from_template(
+                track=track,
                 template=filename_template
             )
 
-            print(f"\t{track_num:>4}| {out_file_title}")
+            print(f"\t{album_or_playlist_tracks.index(track) + 1:>4}| {out_file_title}")
 
             track_obj_title_tuples.append((track, out_file_title))
 
@@ -834,7 +839,8 @@ def download_track(
     track: SpotifySong,
     spotify_dl_cfg: ConfigParser,
     out_file_title: str,
-    dest_dir: Path,
+    output_dir: str,
+    create_dir: bool,
     downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
@@ -851,6 +857,14 @@ def download_track(
 
     global duplicate_downloads_action
     global duplicate_downloads_prompted
+
+    dest_dir = set_output_dir(
+        interactive=interactive,
+        track=track,
+        spotify_dl_cfg=spotify_dl_cfg,
+        cli_arg_output_dir=output_dir,
+        cli_arg_create_dir=create_dir
+    )
 
     if (dest_dir/track_filename).exists():
         # Use user's defined handling if there is one
@@ -957,16 +971,19 @@ def download_track(
 
 def download_all_tracks(
     tracks_to_dl: list,
-    output_dir: Path,
     interactive: bool,
     duplicate_download_handling: str,
     skip_duplicate_downloads: bool,
     spotify_dl_cfg: ConfigParser,
+    output_dir: str = OUTPUT_DIR_DEFAULT,
+    create_dir: bool = False,
     downloader: str = DOWNOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     debug_mode: bool = False
 ) -> list:
-    print(f"\nDownloading to '{output_dir.absolute()}' using {downloader.capitalize()}.\n")
+    downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=downloader)
+
+    print(f"\nDownloading to '{Path(output_dir).absolute()}' using {downloader.capitalize()}.\n")
 
     print('-' * 32)
 
@@ -982,7 +999,8 @@ def download_all_tracks(
                 track=track_obj,
                 spotify_dl_cfg=spotify_dl_cfg,
                 out_file_title=out_file_title,
-                dest_dir=output_dir,
+                output_dir=output_dir,
+                create_dir=create_dir,
                 downloader=downloader,
                 file_type=file_type,
                 interactive=interactive,
@@ -991,7 +1009,7 @@ def download_all_tracks(
             )
 
         except Exception as exc:
-            broken_tracks.append((track_obj, out_file_title, output_dir))
+            broken_tracks.append((track_obj, out_file_title, output_dir, create_dir))
 
             if debug_mode:
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
@@ -1014,7 +1032,7 @@ def spotify_downloader(
     spotify_dl_cfg: ConfigParser,
     downloader: str = DOWNOADER_DEFAULT,
     urls: list = None,
-    output_dir: Path = None,
+    output_dir: str = OUTPUT_DIR_DEFAULT,
     create_dir: bool = None,
     duplicate_download_handling: str = "overwrite",
     skip_duplicate_downloads: bool = None,
@@ -1032,8 +1050,6 @@ def spotify_downloader(
 
         print(f"\nTracks to download: {len(tracks_to_dl)}\n")
 
-        output_dir = set_output_dir(interactive, spotify_dl_cfg, output_dir, create_dir)
-
         broken_tracks.extend(
             download_all_tracks(
                 tracks_to_dl=tracks_to_dl,
@@ -1041,6 +1057,7 @@ def spotify_downloader(
                 spotify_dl_cfg=spotify_dl_cfg,
                 downloader=downloader,
                 output_dir=output_dir,
+                create_dir=create_dir,
                 duplicate_download_handling=duplicate_download_handling,
                 skip_duplicate_downloads=skip_duplicate_downloads,
                 file_type=file_type,
@@ -1092,8 +1109,8 @@ def parse_args():
     parser.add_argument(
         '-o',
         '--output',
-        type=Path,
-        default=Path.home()/"Downloads",
+        type=str,
+        default=OUTPUT_DIR_DEFAULT,
         help="Path to directory where tracks should be downloaded to"
     )
     parser.add_argument(
@@ -1137,7 +1154,7 @@ def parse_args():
         '--skip-duplicate-downloads',
         action='store_true',
         default=False,
-        help="Don't download a song if the file already exists in the output directory."
+        help="[To be deprecated] Don't download a song if the file already exists in the output directory."
     )
 
     return parser.parse_args()
@@ -1172,7 +1189,7 @@ def main():
             spotify_token=token,
             spotify_dl_cfg=spotify_dl_cfg,
             downloader=downloader,
-            output_dir=None,
+            output_dir=OUTPUT_DIR_DEFAULT,
             urls=None,
             create_dir=None,
             debug_mode=None,
@@ -1225,7 +1242,7 @@ def main():
                         interactive=interactive,
                         spotify_token=token,
                         spotify_dl_cfg=spotify_dl_cfg,
-                        output_dir=Path(entry['output_dir']) if 'output_dir' in entry else Path.home()/"Downloads",
+                        output_dir=entry['output_dir'] if 'output_dir' in entry else OUTPUT_DIR_DEFAULT,
                         downloader=downloader or entry.get('downloader', DOWNOADER_DEFAULT),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
@@ -1241,7 +1258,7 @@ def main():
         nl = '\n'
         print(
             "\n[!] The following tracks could not be downloaded:\n"
-            f"  * {f'{nl}  * '.join(out_file_title for _, out_file_title, _ in broken_tracks)}\n"
+            f"  * {f'{nl}  * '.join(out_file_title for _, out_file_title, *_ in broken_tracks)}\n"
         )
 
         num_retries_cfg = int(spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=0))
@@ -1265,20 +1282,21 @@ def main():
             print("Re-attempting to download tracks")
             for i in range(num_retries):
                 print(f"\nAttempt {i + 1} of {num_retries}")
-                for track, out_file_title, output_dir in broken_tracks.copy():
+                for track, out_file_title, output_dir, create_dir in broken_tracks.copy():
                     try:
                         download_track(
                             track=track,
                             spotify_dl_cfg=spotify_dl_cfg,
                             out_file_title=out_file_title,
-                            dest_dir=output_dir,
+                            output_dir=output_dir,
+                            create_dir=create_dir,
                             downloader=downloader,
                             file_type=out_file_type
                         )
                     except Exception:
                         continue
                     else:
-                        broken_tracks.remove((track, out_file_title, output_dir))
+                        broken_tracks.remove((track, out_file_title, output_dir, create_dir))
                 sleep(1)
 
         if interactive:
