@@ -87,6 +87,7 @@ Example of JSON file used to contain download instructions:
 The following arguments can be specified in entries within the config JSON:
 * `url` (Required)
 * `output_dir`
+* `downloader`
 * `create_dir`
 * `skip_duplicate_downloads`
 * `duplicate_download_handling`
