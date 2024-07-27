@@ -528,10 +528,11 @@ def assemble_str_from_template(
 
 def set_output_dir(
     interactive: bool,
-    track: SpotifySong,
     spotify_dl_cfg: ConfigParser,
-    cli_arg_output_dir: str,
-    cli_arg_create_dir: bool = None,
+    output_dir: str,
+    track: SpotifySong = None,
+    create_dir: bool = False,
+    prompt_for_new_location: bool = True
 ) -> Path:
     default_output_dir = str(Path.home()/'Downloads')
 
@@ -539,11 +540,16 @@ def set_output_dir(
         default_output_dir = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=default_output_dir)
 
     if interactive:
-        output_dir = Path(assemble_str_from_template(track, default_output_dir, required=False))
-        print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
+        if track:
+            output_dir = Path(assemble_str_from_template(track, default_output_dir, required=False))
+        else:
+            output_dir = Path(output_dir)
 
-        if other_dir := input("(New download location?) "):
-            output_dir = Path(other_dir)
+        if prompt_for_new_location:
+            print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
+
+            if other_dir := input("(New download location?) "):
+                output_dir = Path(other_dir)
 
         while not output_dir.is_dir():
             mkdir_inp = input(f"The directory '{output_dir.absolute()}' does not exist.  Would you like to create it? [y/n]: ")
@@ -553,10 +559,10 @@ def set_output_dir(
                 output_dir = Path(input("\nNew download location: "))
 
     else:
-        output_dir = Path(assemble_str_from_template(track, cli_arg_output_dir, required=False))
+        output_dir = Path(assemble_str_from_template(track, output_dir, required=False))
 
         if not output_dir.is_dir():
-            if cli_arg_create_dir:
+            if create_dir:
                 output_dir.mkdir(parents=True)
             else:
                 raise ValueError(
@@ -852,7 +858,7 @@ def download_track(
     elif downloader == DOWNLOADER_SPOTIFYDOWN:
         file_ext = "mp3"
 
-    track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title}.{file_ext}")
+    track_filename = re.sub(r'[<>:"/\|\\?*]', '_', f"{out_file_title}.{file_ext}")
 
     global duplicate_downloads_action
     global duplicate_downloads_prompted
@@ -861,8 +867,9 @@ def download_track(
         interactive=interactive,
         track=track,
         spotify_dl_cfg=spotify_dl_cfg,
-        cli_arg_output_dir=output_dir,
-        cli_arg_create_dir=create_dir
+        output_dir=output_dir,
+        create_dir=create_dir,
+        prompt_for_new_location=False
     )
 
     if (dest_dir/track_filename).exists():
@@ -980,6 +987,15 @@ def download_all_tracks(
     debug_mode: bool = False
 ) -> list:
     downloader = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOADER_OPTION, fallback=downloader)
+
+    output_dir = set_output_dir(
+        interactive=interactive,
+        track=None,
+        spotify_dl_cfg=spotify_dl_cfg,
+        output_dir=output_dir,
+        create_dir=create_dir,
+        prompt_for_new_location=True
+    )
 
     print(f"\nDownloading to '{Path(output_dir).absolute()}' using {downloader.capitalize()}.\n")
 
