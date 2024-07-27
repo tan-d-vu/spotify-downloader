@@ -21,24 +21,24 @@ optional arguments:
                         URL(s) of Sptofy songs or playlists to download. If a playlist is given, append "|[TRACK NUMBERS]" to URL to specify which tracks to download. Example:
                         'https://open.spotify.com/playlist/mYpl4YLi5T|1,4,15-' to download the first, fourth, and fifteenth to the end. If not specified, all tracks are downloaded.
   -f FILENAME, --filename FILENAME, --filename-template FILENAME
-                        Specify custom filename template using variables '{title}', '{artist}', '{album}', and '{track_num}'.
+                        Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'. Defaults to '{title} - {artist}'.
   -d {lucida,spotifydown}, --downloader {lucida,spotifydown}
-                        Specify download server to use.
+                        Specify download server to use. Defaults to 'lucida'.
   -t {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}, --file-type {mp3-320,mp3-256,mp3-128,ogg-320,ogg-256,ogg-128,original}
-                        Specify audio file format to download. Must be one of mp3-320, mp3-256, mp3-128, ogg-320, ogg-256, ogg-128, original.
+                        Specify audio file format to download. Must be one of mp3-320, mp3-256, mp3-128, ogg-320, ogg-256, ogg-128, original. Defaults to 'mp3-320'.
   -o OUTPUT, --output OUTPUT
-                        Path to directory where tracks should be downloaded to
+                        Path to directory where tracks should be downloaded to. Defaults to 'C:\Users\mattj\Downloads'
   -c, --create-dir      Create the output directory if it does not exist.
   -p {skip,overwrite,append_number}, --duplicate-download-handling {skip,overwrite,append_number}
-                        Don't download a song if the file already exists in the output directory.
+                        How to handle if a track already exists at the download location. Defaults to 'skip'.
   -k CONFIG_FILE, --config-file CONFIG_FILE
                         Path to JSON containing download instructions.
   --retry-failed-downloads RETRY_FAILED_DOWNLOADS
-                        Number of times to retry failed downloads.
+                        Number of times to retry failed downloads. Defaults to 0.
   --cfg-file CFG_FILE   Path to .cfg file used for user default settings if not using `$HOME/.spotify_dl.cfg`.
-  -s, --skip-duplicate-downloads
-                        [To be deprecated] Don't download a song if the file already exists in the output directory.
   --debug               Debug mode.
+  -s, --skip-duplicate-downloads
+                        [To be deprecated] Don't download a song if the file already exists in the output directory. Defaults to True.
 ```
 
 ### Cfg file
@@ -52,6 +52,8 @@ Example:
 default_download_location="C:\Users\me\Desktop\folder"
 default_filename_template="{artist} - {title}"
 ```
+
+See the [sample .spotify_dl.cfg](./dist/.spotify_dl.cfg).
 
 The following values are supported:
 * `default_download_location`: Path to directory/folder to download tracks to.

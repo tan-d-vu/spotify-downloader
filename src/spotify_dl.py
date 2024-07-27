@@ -97,7 +97,7 @@ FILENAME_TEMPLATE_DEFAULT = r"{title} - {artist}"
 # In interactive mode, user is prompted upon first duplicate encountered
 # Otherwise, set via CLI arg
 DUPLICATE_DOWNLOAD_CHOICES = ["skip", "overwrite", "append_number"]
-DUPLICATE_DOWNLOAD_CHOICE_DEFAULT = "overwrite"
+DUPLICATE_DOWNLOAD_CHOICE_DEFAULT = "skip"
 duplicate_downloads_action = DUPLICATE_DOWNLOAD_CHOICE_DEFAULT
 duplicate_downloads_prompted = False
 
@@ -400,14 +400,14 @@ def parse_cfg(cfg_path: Path) -> ConfigParser:
         )
         sys.exit(1)
 
-    if (default_download_location := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=None)) \
-            and not Path(default_download_location).is_dir():
-        print(
-            f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
-            f"'{CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION}': '{default_download_location}' "
-            f"was not found."
-        )
-        sys.exit(1)
+    # if (default_download_location := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=None)) \
+    #         and not Path(default_download_location).is_dir():
+    #     print(
+    #         f"[!] Cfg file at {cfg_path.absolute()} has an invalid value for "
+    #         f"'{CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION}': '{default_download_location}' "
+    #         f"was not found."
+    #     )
+    #     sys.exit(1)
 
     if (default_num_retries := parser.get(CFG_SECTION_HEADER, CFG_DEFAULT_NUM_RETRY_ATTEMPTS_OPTION, fallback=None)) \
             and not str(default_num_retries).isnumeric():
@@ -612,9 +612,8 @@ def _download_track_spotifydown(track: SpotifySong):
     }
 
     if 'link' not in resp_json or 'metadata' not in resp_json:
-        print("\tDownload failed.")
         raise RuntimeError(
-            f"Bad response for track '{track.artist} - {track.title}' ({track.id}): {resp_json}"
+            f"Bad metadata response for track '{track.artist} - {track.title}': {resp_json}"
         )
 
     hdrs['Host'] = resp_json['link'].split('/')[2]
@@ -844,7 +843,7 @@ def download_track(
     downloader: str = DOWNLOADER_DEFAULT,
     file_type: str = DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
     interactive: bool = False,
-    duplicate_download_handling: str = "overwrite",
+    duplicate_download_handling: str = DUPLICATE_DOWNLOAD_CHOICE_DEFAULT,
     skip_duplicates: bool = False
 ):
     if downloader == DOWNLOADER_LUCIDA:
@@ -921,7 +920,7 @@ def download_track(
             num = 0
             while (dest_dir/track_filename).exists():
                 num += 1
-                track_filename = re.sub(r'[<>:"/\|?*]', '_', f"{out_file_title} ({num}).{file_ext}")
+                track_filename = re.sub(r'[<>:"/\|\\?*]', '_', f"{out_file_title} ({num}).{file_ext}")
 
     print(f"Downloading: '{out_file_title}'...")
 
@@ -934,9 +933,8 @@ def download_track(
     # Lucida returns HTML when it has a problem
     if not audio_dl_resp.ok \
             or audio_dl_resp.content.startswith(b"<!doctype html>"):
-        print("\tDownload failed.")
         raise RuntimeError(
-            f"Bad download response for track '{out_file_title}' ({track.id}): [{audio_dl_resp.status_code}] {audio_dl_resp.content}"
+            f"Bad download response for track '{out_file_title}': [{audio_dl_resp.status_code}] {audio_dl_resp.content}"
         )
 
     with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
@@ -1009,6 +1007,8 @@ def download_all_tracks(
             )
 
         except Exception as exc:
+            print("\tDownload failed!")
+
             broken_tracks.append((track_obj, out_file_title, output_dir, create_dir))
 
             if debug_mode:
@@ -1034,7 +1034,7 @@ def spotify_downloader(
     urls: list = None,
     output_dir: str = OUTPUT_DIR_DEFAULT,
     create_dir: bool = None,
-    duplicate_download_handling: str = "overwrite",
+    duplicate_download_handling: str = DUPLICATE_DOWNLOAD_CHOICE_DEFAULT,
     skip_duplicate_downloads: bool = None,
     debug_mode: bool = None,
     filename_template: str = FILENAME_TEMPLATE_DEFAULT,
@@ -1088,30 +1088,32 @@ def parse_args():
         '--filename-template',
         type=str,
         default=FILENAME_TEMPLATE_DEFAULT,
-        help=r"Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'."
+        help=r"Specify custom filename template using variables '{title}', '{artist}', and '{track_num}'. "
+            f"Defaults to '{FILENAME_TEMPLATE_DEFAULT}'."
     )
     parser.add_argument(
         '-d',
         '--downloader',
         type=str,
-        default=DOWNLOADER_DEFAULT,
         choices=DOWNLOADER_OPTIONS,
-        help="Specify download server to use."
+        default=DOWNLOADER_DEFAULT,
+        help=f"Specify download server to use. Defaults to '{DOWNLOADER_DEFAULT}'."
     )
     parser.add_argument(
         '-t',
         '--file-type',
         type=str,
-        default=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
         choices=DOWNLOADER_LUCIDA_FILE_FORMATS,
-        help=f"Specify audio file format to download.  Must be one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}."
+        default=DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT,
+        help=f"Specify audio file format to download.  Must be one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}. "
+            f"Defaults to '{DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT}'."
     )
     parser.add_argument(
         '-o',
         '--output',
         type=str,
         default=OUTPUT_DIR_DEFAULT,
-        help="Path to directory where tracks should be downloaded to"
+        help=f"Path to directory where tracks should be downloaded to.  Defaults to '{OUTPUT_DIR_DEFAULT}'"
     )
     parser.add_argument(
         '-c',
@@ -1123,8 +1125,9 @@ def parse_args():
         '-p',
         '--duplicate-download-handling',
         choices=DUPLICATE_DOWNLOAD_CHOICES,
-        default="overwrite",
-        help="Don't download a song if the file already exists in the output directory."
+        default=DUPLICATE_DOWNLOAD_CHOICE_DEFAULT,
+        help="How to handle if a track already exists at the download location. "
+            f"Defaults to '{DUPLICATE_DOWNLOAD_CHOICE_DEFAULT}'."
     )
     parser.add_argument(
         '-k',
@@ -1135,7 +1138,8 @@ def parse_args():
     parser.add_argument(
         '--retry-failed-downloads',
         type=int,
-        help="Number of times to retry failed downloads."
+        default=0,
+        help="Number of times to retry failed downloads. Defaults to 0."
     )
     parser.add_argument(
         '--cfg-file',
@@ -1153,8 +1157,8 @@ def parse_args():
         '-s',
         '--skip-duplicate-downloads',
         action='store_true',
-        default=False,
-        help="[To be deprecated] Don't download a song if the file already exists in the output directory."
+        default=True,
+        help="[To be deprecated] Don't download a song if the file already exists in the output directory. Defaults to True."
     )
 
     return parser.parse_args()
@@ -1246,7 +1250,7 @@ def main():
                         downloader=downloader or entry.get('downloader', DOWNLOADER_DEFAULT),
                         urls=[entry['url']],
                         create_dir=entry.get('create_dir'),
-                        duplicate_download_handling=entry.get('duplicate_download_handling', "overwrite"),
+                        duplicate_download_handling=entry.get('duplicate_download_handling', DUPLICATE_DOWNLOAD_CHOICE_DEFAULT),
                         skip_duplicate_downloads=entry.get('skip_duplicate_downloads', False),
                         debug_mode=args.debug,
                         filename_template=entry.get('filename_template'),
