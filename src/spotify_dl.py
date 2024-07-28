@@ -532,18 +532,20 @@ def set_output_dir(
     output_dir: str,
     track: SpotifySong = None,
     create_dir: bool = False,
-    prompt_for_new_location: bool = True
+    prompt_for_new_location: bool = True,
+    check_dir_exists: bool = True
 ) -> Path:
-    default_output_dir = str(Path.home()/'Downloads')
+    default_output_dir = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=output_dir)
 
-    if spotify_dl_cfg:
-        default_output_dir = spotify_dl_cfg.get(CFG_SECTION_HEADER, CFG_DEFAULT_DOWNLOAD_LOCATION_OPTION, fallback=default_output_dir)
+    # specified output dir takes precedence if it's not the default
+    if output_dir != OUTPUT_DIR_DEFAULT:
+        default_output_dir = output_dir
 
     if interactive:
         if track:
-            output_dir = Path(assemble_str_from_template(track, default_output_dir, required=False))
+            output_dir = Path(assemble_str_from_template(track, str(default_output_dir), required=False))
         else:
-            output_dir = Path(output_dir)
+            output_dir = Path(default_output_dir)
 
         if prompt_for_new_location:
             print(f"Downloads will go to {output_dir}.  If you would like to change, enter the location or press [ENTER]")
@@ -551,17 +553,21 @@ def set_output_dir(
             if other_dir := input("(New download location?) "):
                 output_dir = Path(other_dir)
 
-        while not output_dir.is_dir():
-            mkdir_inp = input(f"The directory '{output_dir.absolute()}' does not exist.  Would you like to create it? [y/n]: ")
-            if mkdir_inp.lower() == 'y':
-                output_dir.mkdir(parents=True)
-            else:
-                output_dir = Path(input("\nNew download location: "))
+        if check_dir_exists:
+            while not output_dir.is_dir():
+                mkdir_inp = input(f"The directory '{output_dir.absolute()}' does not exist.  Would you like to create it? [y/n]: ")
+                if mkdir_inp.lower() == 'y':
+                    output_dir.mkdir(parents=True)
+                else:
+                    output_dir = Path(input("\nNew download location: "))
 
     else:
-        output_dir = Path(assemble_str_from_template(track, output_dir, required=False))
+        if track:
+            output_dir = Path(assemble_str_from_template(track, str(output_dir), required=False))
+        else:
+            output_dir = Path(default_output_dir)
 
-        if not output_dir.is_dir():
+        if check_dir_exists and not output_dir.is_dir():
             if create_dir:
                 output_dir.mkdir(parents=True)
             else:
@@ -869,7 +875,8 @@ def download_track(
         spotify_dl_cfg=spotify_dl_cfg,
         output_dir=output_dir,
         create_dir=create_dir,
-        prompt_for_new_location=False
+        prompt_for_new_location=False,
+        check_dir_exists=True
     )
 
     if (dest_dir/track_filename).exists():
@@ -994,7 +1001,8 @@ def download_all_tracks(
         spotify_dl_cfg=spotify_dl_cfg,
         output_dir=output_dir,
         create_dir=create_dir,
-        prompt_for_new_location=True
+        prompt_for_new_location=True,
+        check_dir_exists=False
     )
 
     print(f"\nDownloading to '{Path(output_dir).absolute()}' using {downloader.capitalize()}.\n")
@@ -1037,7 +1045,10 @@ def download_all_tracks(
 
     print("\nAll done.\n")
     if broken_tracks:
-        print("[!] Some tracks failed to download.")
+        print(
+            f"[!] {len(broken_tracks)} track{'s' if len(broken_tracks) != 1 else ''} failed "
+            "to download. Before exiting, there will be a chance to retry downloading these.\n"
+        )
 
     return broken_tracks
 
