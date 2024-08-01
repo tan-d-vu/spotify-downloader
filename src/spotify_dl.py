@@ -1325,7 +1325,7 @@ def main():
                             file_type=out_file_type
                         )
                     except Exception:
-                        continue
+                        print("\tDownload failed!")
                     else:
                         broken_tracks.remove((track, out_file_title, output_dir, create_dir))
                 sleep(1)
