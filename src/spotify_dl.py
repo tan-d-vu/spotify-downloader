@@ -964,6 +964,8 @@ def download_track(
         cover_resp = requests.get(track.cover_art_url)
         mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
 
+    mp3_file.tag.title = track.title
+    mp3_file.tag.artist = track.artist
     mp3_file.tag.album = track.album
 
     if track.release_date:
