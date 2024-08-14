@@ -639,12 +639,18 @@ def _download_track_lucida(track_url: str, file_format=DOWNLOADER_LUCIDA_FILE_FO
     if file_format not in DOWNLOADER_LUCIDA_FILE_FORMATS:
         raise ValueError(f"File format '{file_format}' is not one of {', '.join(DOWNLOADER_LUCIDA_FILE_FORMATS)}")
 
+    # Grab token from response from Lucida server
+    metadata_req = requests.get(f"https://lucida.to/?url={track_url}").content.decode()
+    token = re.search(r"token:\s?\"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\"", metadata_req)
+    if not token:
+        raise RuntimeError("Unable to locate token for Lucida")
+
     sleep(5)
 
     # downscale args: mp3-320, mp3-256, mp3-128, ogg-320, ogg-256, ogg-128
     return requests.get(
         f"https://hund.lucida.to/api/fetch/stream?url={track_url}"
-        f"&downscale={file_format}&meta=true&private=true&country=auto"
+        f"&downscale={file_format}&meta=true&private=true&country=auto&csrf={token.group(1)}"
     )
 
 
