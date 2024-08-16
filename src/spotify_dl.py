@@ -1320,6 +1320,10 @@ def main():
         if num_retries:
             print("Re-attempting to download tracks")
             for i in range(num_retries):
+
+                if not broken_tracks:
+                    break
+
                 print(f"\nAttempt {i + 1} of {num_retries}")
                 for track, out_file_title, output_dir, create_dir in broken_tracks.copy():
                     try:
