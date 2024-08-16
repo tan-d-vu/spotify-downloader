@@ -69,7 +69,13 @@ DOWNLOADER_SPOTIFYDOWN_HEADERS = {
 ## Lucida constants
 DOWNLOADER_LUCIDA = "lucida"
 DOWNLOADER_LUCIDA_URL = "https://lucida.to"
-DOWNLOADER_LUCIDA_FILE_FORMATS = ['mp3-320', 'mp3-256', 'mp3-128', 'ogg-320', 'ogg-256', 'ogg-128', 'original']
+DOWNLOADER_LUCIDA_FILE_FORMATS = [
+    'mp3-320', 'mp3-256', 'mp3-128',
+    'ogg-vorbis-320', 'ogg-vorbis-256', 'ogg-vorbis-128',
+    'ogg-opus-320', 'ogg-opus-256', 'ogg-opus-128', 'ogg-opus-96', 'ogg-opus-64',
+    'opus-320', 'opus-256', 'opus-128', 'opus-96', 'opus-64',
+    'bitcrush', 'original'
+]
 DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT = "mp3-320"
 DOWNLOADER_LUCIDA_HEADERS = {
     'Host': 'lucida.to',
