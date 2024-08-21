@@ -10,23 +10,8 @@ from pathlib import Path
 from time import sleep
 
 # Want to figure out how to do this without a third party module
-import eyed3
 import requests
-from eyed3.id3 import ID3_V2_3
-from eyed3.id3.frames import ImageFrame
-
-
-eyed3_warnings = []
-def _suppress_warning(*args, **kwargs):
-    eyed3_warnings.append((args, kwargs))
-    logging.debug(*args, **kwargs)
-
-
-# Suppress warnings from eyeD3
-import logging
-logging.getLogger('eyed3.mp3.headers').warning = _suppress_warning
-logging.getLogger('eyed3.id3.tag').warning = _suppress_warning
-logging.getLogger('eyed3.core').warning = _suppress_warning
+from mutagen import File as AudioFile
 
 
 # Cheeky Ctrl+C handler
@@ -69,15 +54,16 @@ DOWNLOADER_SPOTIFYDOWN_HEADERS = {
 ## Lucida constants
 DOWNLOADER_LUCIDA = "lucida"
 DOWNLOADER_LUCIDA_URL = "https://lucida.to"
+# Can't support formats that aren't available in mutagen
 DOWNLOADER_LUCIDA_FILE_FORMATS = [
     'original',
     'mp3-320', 'mp3-256', 'mp3-128',
     'ogg-vorbis-320', 'ogg-vorbis-256', 'ogg-vorbis-128',
     'ogg-opus-320', 'ogg-opus-256', 'ogg-opus-128', 'ogg-opus-96', 'ogg-opus-64',
-    'opus-320', 'opus-256', 'opus-128', 'opus-96', 'opus-64',
+    #'opus-320', 'opus-256', 'opus-128', 'opus-96', 'opus-64',
     'flac-16',
     'm4a-aac-320', 'm4a-aac-256', 'm4a-aac-192', 'm4a-aac-128',
-    'bitcrush'
+    #'bitcrush'
 ]
 DOWNLOADER_LUCIDA_FILE_FORMAT_DEFAULT = "mp3-320"
 DOWNLOADER_LUCIDA_HEADERS = {
@@ -966,31 +952,11 @@ def download_track(
             f"Bad download response for track '{out_file_title}': [{audio_dl_resp.status_code}] {audio_dl_resp.content}"
         )
 
-    with open(dest_dir/track_filename, 'wb') as track_mp3_fp:
-        track_mp3_fp.write(audio_dl_resp.content)
+    with open(dest_dir/track_filename, 'wb') as track_audio_fp:
+        track_audio_fp.write(audio_dl_resp.content)
 
-    mp3_file = eyed3.load(dest_dir/track_filename)
-
-    if not mp3_file.tag:
-        mp3_file.initTag()
-
-    # For cover art
-    if track.cover_art_url:
-        cover_resp = requests.get(track.cover_art_url)
-        mp3_file.tag.images.set(ImageFrame.FRONT_COVER, cover_resp.content, 'image/jpeg')
-
-    mp3_file.tag.title = track.title
-    mp3_file.tag.artist = track.artist
-    mp3_file.tag.album = track.album
-
-    if track.release_date:
-        mp3_file.tag.release_date = track.release_date
-
-    if track.track_number:
-        mp3_file.tag.track_num = track.track_number
-
-    # remove version arg if album art not showing up in Serato
-    mp3_file.tag.save(version=ID3_V2_3)
+    audio_file = AudioFile(dest_dir/track_filename)
+    audio_file.save()
 
     # prevent API throttling
     sleep(0.5)
@@ -1056,7 +1022,6 @@ def download_all_tracks(
                 with open('.spotify_dl_err.txt', 'a') as debug_fp:
                     debug_fp.write(
                         f"{datetime.now()} | {exc}"
-                        f"{f'eyeD3 parse errors: {eyed3_warnings}' if eyed3_warnings else ''} "
                         f":: {traceback.format_exc()}\n\n"
                     )
 
