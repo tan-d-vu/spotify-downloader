@@ -956,7 +956,31 @@ def download_track(
         track_audio_fp.write(audio_dl_resp.content)
 
     audio_file = AudioFile(dest_dir/track_filename)
-    audio_file.save()
+
+    if not audio_file:
+        print("\tUnable to parse metadata of track file! Fields like 'title' may be empty.")
+
+    else:
+        if audio_file.tags:
+            del audio_file.tags['comment']
+        else:
+            # No idea if this will work, hopefully it won't have to
+            audio_file.tags['title'] = [track.title]
+            audio_file.tags['artist'] = track.artist.split(', ')
+            audio_file.tags['album'] = [track.album]
+
+            # For cover art
+            if track.cover_art_url:
+                cover_resp = requests.get(track.cover_art_url)
+                audio_file.tags['metadata_block_picture'] = cover_resp.content
+
+            if track.release_date:
+                audio_file.tags['release_date'] = [track.release_date]
+
+            if track.track_number:
+                audio_file.tags['tracknumber'] = [track.track_number]
+
+        audio_file.save()
 
     # prevent API throttling
     sleep(0.5)
