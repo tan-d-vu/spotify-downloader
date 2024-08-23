@@ -963,21 +963,11 @@ def download_track(
     else:
         if audio_file.tags:
             # Remove comments
-
-            try:
-                del audio_file.tags['comment']
-            except KeyError:
-                pass
-
-            try:
-                del audio_file.tags['COMM']
-            except KeyError:
-                pass
-
-            try:
-                del audio_file.tags['COMM::\x00\x00\x00']
-            except KeyError:
-                pass
+            for key in ['comment', 'COMM', 'COMM::\x00\x00\x00']:
+                try:
+                    del audio_file.tags[key]
+                except KeyError:
+                    pass
 
         else:
             # No idea if this will work, hopefully it won't have to
