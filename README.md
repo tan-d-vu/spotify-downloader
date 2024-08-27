@@ -2,8 +2,6 @@
 
 Spotify song downloader using API created by [lucida.to](https://lucida.to/) _(Source code can be found [here](https://git.gay/lucida/lucida))_
 
-## **NOTICE: There is an ongoing issue with Lucida accessing Spotify.  For the time being, use the Spotifydown download server**
-
 The script `src/spotify_dl.py` can be run in interactive mode or CLI mode.
 
 ## Interactive mode
