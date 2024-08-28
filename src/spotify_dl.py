@@ -216,6 +216,7 @@ def get_spotify_album(album_id: str, token: str) -> SpotifyAlbum:
             release_date=release_date
         )
         for track in album['tracks']['items']
+        if track
     ]
 
     return SpotifyAlbum(
@@ -251,6 +252,7 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
             release_date=track_data['track']['album']['release_date']
         )
         for track_data in playlist_tracks['items']
+        if track_data['track']
     ]
 
     while next_chunk_url := playlist_tracks.get('next'):
@@ -272,6 +274,7 @@ def get_spotify_playlist(playlist_id: str, token: str) -> SpotifyPlaylist:
                 release_date=track_data['track']['album']['release_date']
             )
             for track_data in playlist_tracks['items']
+            if track_data['track']
         )
 
     return SpotifyPlaylist(
@@ -1204,7 +1207,7 @@ def parse_args():
 
 
 def main():
-    print('', '=' * 48, '||          Spotify Song Downloader           ||', '=' * 48, sep='\n', end='\n\n')
+    print('', '=' * 48, '||          Spotify Song Downloader v0.2.1           ||', '=' * 48, sep='\n', end='\n\n')
 
     # Grab token anyway
     token_resp = requests.get("https://open.spotify.com/get_access_token")
